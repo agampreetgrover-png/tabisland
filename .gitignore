@@ -1,0 +1,10 @@
+# Gradle / Kotlin caches and build output
+.gradle/
+.kotlin/
+build/
+# Machine-specific SDK path
+local.properties
+# IDE files
+.idea/
+*.iml
+.DS_Store

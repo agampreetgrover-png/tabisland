@@ -1,0 +1,3 @@
+<resources>
+    <string name="a11y_desc">Draws Tab Island around the camera. It checks which windows are on screen only to hide during fullscreen video and games; it never reads what is inside them.</string>
+</resources>
