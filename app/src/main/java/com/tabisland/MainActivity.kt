@@ -1,16 +1,15 @@
 package com.tabisland
 
-import android.Manifest
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Bundle
 import android.provider.Settings
@@ -20,6 +19,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -33,19 +33,22 @@ object Prefs {
     val groups = listOf(
         "What the island shows" to listOf(
             "media" to "Music",
+            "peek" to "Show the song when Spotify starts",
             "call" to "Calls",
             "notif" to "Notifications",
             "timer" to "Timers and stopwatch",
+            "nav" to "Navigation",
+            "torch" to "Flashlight",
+            "progress" to "Download progress",
         ),
         "System events" to listOf(
             "charge" to "Charging",
             "battery" to "Low battery (20%)",
             "silent" to "Silent, vibrate and ring",
             "unlock" to "Unlock",
-            "earbuds" to "Earbuds and their battery",
         ),
         "Behaviour" to listOf(
-            "idle" to "Show the pill when nothing is happening",
+            "idle" to "Show the pill when idle",
             "fullscreen" to "Hide in fullscreen apps",
             "haptics" to "Haptics",
         ),
@@ -67,6 +70,7 @@ private const val BASALT = 0xFF161618.toInt()
 private const val SEAM = 0xFF2A2A2E.toInt()
 private const val PUMICE = 0xFF9E9EA6.toInt()
 private const val BONE = 0xFFF4F4F1.toInt()
+private const val TRACK = 0xFF3A3A40.toInt() // off-state controls: must read on BASALT, unlike the hairline SEAM
 
 class MainActivity : Activity() {
     private val density by lazy { resources.displayMetrics.density }
@@ -84,25 +88,32 @@ class MainActivity : Activity() {
         val prefs = getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        col.addView(text("Tab Island", 34f, BONE, 600).apply { letterSpacing = -0.02f })
-        status = text("", 15f, PUMICE).apply { setPadding(0, dp(6), 0, 0) }
+        col.addView(text("Tab Island", 34f, BONE, 600).apply { letterSpacing = -0.02f; setPadding(dp(16), 0, dp(16), 0) })
+        status = text("", 15f, PUMICE).apply { setPadding(dp(16), dp(6), dp(16), 0) }
         col.addView(status)
 
         heading(col, "Set up")
         col.addView(group(
             step(1, "Show the island", "Accessibility") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
             step(2, "Music, calls and notifications", "Notification access") { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-            step(3, "Earbuds", "Nearby devices permission") { requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1) },
         ))
         restrictedHint = text(
             "If a switch is greyed out in Settings, open App info, tap ⋮, choose Allow restricted settings, then try again.",
             13f, PUMICE,
         ).apply { setPadding(dp(16), dp(10), dp(16), 0) }
         col.addView(restrictedHint)
-        col.addView(pillButton("Preview the island") {
-            Island.flash = Flash("preview", "Charging", "80%", icon = tinted(R.drawable.ic_bolt, GREEN), accent = GREEN,
-                level = 80, until = System.currentTimeMillis() + 3000)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) })
+        heading(col, "Try each style")
+        col.addView(text("Each one plays on the island for a few seconds.", 13f, PUMICE).apply { setPadding(dp(16), 0, dp(16), dp(12)) })
+        // two-column grid of pills: 11 full-width rows would push the switches a screen further down
+        col.addView(GridLayout(this).apply {
+            columnCount = 2
+            for ((style, label) in Demo.styles) addView(pillButton(label) { Demo.show(this@MainActivity, style) },
+                GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED), GridLayout.spec(GridLayout.UNDEFINED, 1f)).apply {
+                    width = 0; height = dp(48); setMargins(dp(4), dp(4), dp(4), dp(4))
+                })
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = -dp(4); marginEnd = -dp(4)
+        })
 
         for ((title, switches) in Prefs.groups) {
             heading(col, title)
@@ -121,13 +132,20 @@ class MainActivity : Activity() {
             setBackgroundColor(INK)
             isVerticalScrollBarEnabled = false
             addView(col)
-            setOnApplyWindowInsetsListener { _, insets ->
+            clipToPadding = true // content stops at the status bar instead of scrolling under the clock and the island
+            setOnApplyWindowInsetsListener { v, insets ->
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                col.setPadding(dp(16) + bars.left, bars.top + dp(28), dp(16) + bars.right, bars.bottom + dp(32))
+                v.setPadding(0, bars.top, 0, 0)
+                col.setPadding(dp(16) + bars.left, dp(28), dp(16) + bars.right, bars.bottom + dp(32))
                 insets
             }
         })
         if (intent.getBooleanExtra("fullscreen", false)) toggleFullscreen()
+    }
+
+    override fun onDestroy() {
+        Demo.clear()
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -136,11 +154,10 @@ class MainActivity : Activity() {
             ?.contains("$packageName/") == true
         val notif = getSystemService(NotificationManager::class.java)
             .isNotificationListenerAccessGranted(ComponentName(this, MediaListener::class.java))
-        val bt = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        listOf(a11y, notif, bt).forEachIndexed { i, done -> mark(i, done) }
+        listOf(a11y, notif).forEachIndexed { i, done -> mark(i, done) }
         status.text = when {
             !a11y -> "The island is off. Start with step 1."
-            !notif || !bt -> "The island is on. Finish setup to show music, calls and earbuds."
+            !notif -> "The island is on. Finish setup to show music, calls and notifications."
             else -> "The island is on."
         }
         restrictedHint.visibility = if (a11y && notif) View.GONE else View.VISIBLE
@@ -235,9 +252,18 @@ class MainActivity : Activity() {
         minHeight = dp(56)
         setPadding(dp(16), dp(8), dp(16), dp(8))
         background = ripple()
+        // own drawables: the DeviceDefault track bakes in its own alpha, so tinting it came out grey
         val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-        thumbTintList = ColorStateList(states, intArrayOf(INK, PUMICE))
-        trackTintList = ColorStateList(states, intArrayOf(BONE, SEAM))
+        trackDrawable = GradientDrawable().apply {
+            cornerRadius = dp(16).toFloat(); setSize(dp(52), dp(32))
+            color = ColorStateList(states, intArrayOf(BONE, TRACK))
+        }
+        thumbDrawable = InsetDrawable(GradientDrawable().apply {
+            shape = GradientDrawable.OVAL; setSize(dp(24), dp(24))
+            color = ColorStateList(states, intArrayOf(INK, PUMICE))
+        }, dp(4))
+        thumbTintList = null; trackTintList = null
+        switchMinWidth = dp(52)
         setOnCheckedChangeListener { _, v -> onChange(v) }
     }
 
@@ -255,7 +281,7 @@ class MainActivity : Activity() {
                 min = s.min; max = s.max; progress = value
                 contentDescription = s.label
                 progressTintList = ColorStateList.valueOf(BONE)
-                progressBackgroundTintList = ColorStateList.valueOf(SEAM)
+                progressBackgroundTintList = ColorStateList.valueOf(PUMICE) // the framework track draws at ~30% alpha, so TRACK vanished
                 thumbTintList = ColorStateList.valueOf(BONE)
                 setPadding(0, dp(12), 0, dp(12))
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -270,10 +296,12 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Outlined pill: the island's shape, used for the one secondary action. */
-    private fun pillButton(label: String, onClick: () -> Unit) = text(label, 16f, BONE, 600).apply {
+    /** Pill-shaped button in the group surface colour: the island's shape. */
+    private fun pillButton(label: String, onClick: () -> Unit) = text(label, 15f, BONE, 500).apply {
         gravity = Gravity.CENTER
-        val shape = GradientDrawable().apply { cornerRadius = dp(26).toFloat(); setStroke(dp(1), SEAM); setColor(INK) }
+        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        setPadding(dp(12), 0, dp(12), 0)
+        val shape = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(BASALT) }
         background = ripple(shape)
         isClickable = true
         setOnClickListener { onClick() }

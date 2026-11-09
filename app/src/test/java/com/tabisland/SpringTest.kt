@@ -13,9 +13,9 @@ class SpringTest {
         return s to peak
     }
 
-    @Test fun bouncyGrowOvershootsAFewPercentThenSettles() {
-        val (s, peak) = run(0.42f, 0.66f, 1.5f)
-        assertTrue("peak=$peak", peak in 103f..110f)
+    @Test fun growOvershootsSlightlyThenSettles() {
+        val (s, peak) = run(0.42f, 0.8f, 1.5f)
+        assertTrue("peak=$peak", peak in 100.5f..104f)
         assertTrue(s.settled(0.5f))
     }
 

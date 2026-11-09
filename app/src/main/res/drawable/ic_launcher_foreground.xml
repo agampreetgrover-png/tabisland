@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- the island: a black pill inside the 66dp safe zone -->
+    <path android:fillColor="#FF000000"
+        android:pathData="M35,43h38a11,11 0 0,1 0,22h-38a11,11 0 0,1 0,-22z" />
+    <!-- camera lens -->
+    <path android:fillColor="#FF1C1C22"
+        android:pathData="M54,47.5a6.5,6.5 0 1,1 0,13a6.5,6.5 0 1,1 0,-13z" />
+    <path android:fillColor="#FF2E2E44"
+        android:pathData="M54,51a3,3 0 1,1 0,6a3,3 0 1,1 0,-6z" />
+    <path android:fillColor="#FF6A6A9A"
+        android:pathData="M55.6,51.4a1,1 0 1,1 0,2a1,1 0 1,1 0,-2z" />
+    <!-- album art -->
+    <path android:fillColor="#FFFF9F0A"
+        android:pathData="M31.5,49.5h6a2.5,2.5 0 0,1 2.5,2.5v4a2.5,2.5 0 0,1 -2.5,2.5h-6a2.5,2.5 0 0,1 -2.5,-2.5v-4a2.5,2.5 0 0,1 2.5,-2.5z" />
+    <!-- waveform -->
+    <path android:strokeColor="#FFFF9F0A" android:strokeWidth="1.8" android:strokeLineCap="round"
+        android:pathData="M69.5,52.5V55.5M72.5,50V58M75.5,51.5V56.5M78.5,53V55" />
+</vector>

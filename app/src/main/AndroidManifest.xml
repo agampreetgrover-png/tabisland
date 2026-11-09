@@ -1,7 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-
     <!-- package visibility: app icons and long-press launch for any launchable app -->
     <queries>
         <intent>
@@ -12,6 +10,7 @@
 
     <application
         android:label="Tab Island"
+        android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
         <activity android:name=".MainActivity" android:exported="true">

@@ -10,6 +10,8 @@ const val WHITE = 0xFFFFFFFF.toInt()
 const val GREEN = 0xFF30D158.toInt()
 const val ORANGE = 0xFFFF9F0A.toInt()
 const val RED = 0xFFFF453A.toInt()
+const val BLUE = 0xFF0A84FF.toInt()
+const val YELLOW = 0xFFFFD60A.toInt()
 const val PAUSED_KEEP_MS = 5 * 60_000L
 
 /** Something the pill can show. [pkg]/[open] drive long-press and tap. */
@@ -55,6 +57,23 @@ class Timer(
     override val open: PendingIntent?,
 ) : Live
 
+/**
+ * A live activity that lasts while something is on: navigation, flashlight, a download. [pref] is its settings switch.
+ * [rank] ≥ 2 shows above music (navigation, flashlight); below 2 only when nothing else is going on (progress).
+ */
+class Ongoing(
+    val key: String,
+    val pref: String,
+    val title: String,
+    val text: String,
+    val icon: Drawable?,
+    val accent: Int,
+    val level: Int?,
+    val rank: Int,
+    override val pkg: String?,
+    override val open: PendingIntent?,
+) : Live
+
 class Media(
     val title: String,
     val artist: String,
@@ -81,18 +100,30 @@ object Island {
         set(v) { field = v; onChange?.invoke() }
     var flash: Flash? = null
         set(v) { field = v; onChange?.invoke() }
+    private val ongoing = LinkedHashMap<String, Ongoing>()
     var controller: MediaController? = null
     var onChange: (() -> Unit)? = null
 
-    fun top(now: Long, on: (String) -> Boolean) = pick(call, flash, timer, media, now, on)
+    fun putOngoing(o: Ongoing) { ongoing[o.key] = o; onChange?.invoke() }
+    fun removeOngoing(key: String) { if (ongoing.remove(key) != null) onChange?.invoke() }
+    fun clearOngoing(keep: String) { if (ongoing.keys.retainAll { it == keep }) onChange?.invoke() }
+
+    fun top(now: Long, on: (String) -> Boolean) = pick(call, flash, timer, ongoing.values, media, now, on)
 }
 
-/** Priority: call > flash > timer > media > idle (null). [on] answers the per-feature switches. */
-fun pick(call: Call?, flash: Flash?, timer: Timer?, media: Media?, now: Long, on: (String) -> Boolean): Live? =
-    call?.takeIf { on("call") }
+/**
+ * Priority: call > flash > timer > navigation/flashlight > music > progress > idle (null).
+ * [on] answers the per-feature switches.
+ */
+fun pick(call: Call?, flash: Flash?, timer: Timer?, ongoing: Collection<Ongoing>, media: Media?, now: Long, on: (String) -> Boolean): Live? {
+    val top = ongoing.filter { on(it.pref) }.maxByOrNull { it.rank }
+    return call?.takeIf { on("call") }
         ?: flash?.takeIf { it.until > now && on(it.key) }
         ?: timer?.takeIf { on("timer") }
+        ?: top?.takeIf { it.rank >= 2 }
         ?: media?.takeIf { on("media") && (it.playing || now - it.lastPlayed < PAUSED_KEEP_MS) }
+        ?: top
+}
 
 /** When [live] stops qualifying on its own, so the service knows when to re-check. */
 fun expiry(live: Live?): Long? = when (live) {

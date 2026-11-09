@@ -44,6 +44,7 @@ class MediaListener : NotificationListenerService() {
         attach(null)
         Island.call = null
         Island.timer = null
+        Island.clearOngoing(keep = "torch") // no removal callbacks will arrive for these; torch isn't ours
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap?) {
@@ -56,9 +57,19 @@ class MediaListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         alerted.remove(sbn.key)
+        probes.remove(sbn.key)
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
         if (Island.flash?.id == sbn.key) Island.flash = null
+        Island.removeOngoing(sbn.key)
+    }
+
+    /** 0–100 for a determinate progress bar (downloads, uploads, installs), else null. */
+    private fun progressOf(n: Notification): Int? {
+        val x = n.extras
+        val max = x.getInt(Notification.EXTRA_PROGRESS_MAX)
+        if (max <= 0 || x.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE)) return null
+        return (x.getInt(Notification.EXTRA_PROGRESS) * 100L / max).toInt().coerceIn(0, 100)
     }
 
     private fun classify(sbn: StatusBarNotification, alert: Boolean) {
@@ -68,18 +79,31 @@ class MediaListener : NotificationListenerService() {
         if (pkg == packageName || x.containsKey(Notification.EXTRA_MEDIA_SESSION)) return // music comes from the session
         val title = x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (x.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: x.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-        val chrono = if (sbn.isOngoing) chronometer(n) else null
+        val chrono = if (sbn.isOngoing) chronometer(sbn.key, n) else null
+        val nav = sbn.isOngoing && n.category == Notification.CATEGORY_NAVIGATION
+        val progress = if (sbn.isOngoing) progressOf(n) else null // a finished, dismissible "100%" isn't live
+        if (!nav && progress == null) Island.removeOngoing(sbn.key) // e.g. a finished download
         when {
             n.category == Notification.CATEGORY_CALL && sbn.isOngoing ->
                 Island.call = Call(sbn.key, title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
                     n.actions?.toList().orEmpty(), chrono?.first, pkg, n.contentIntent ?: n.fullScreenIntent)
             sbn.isOngoing && chrono != null ->
                 Island.timer = Timer(sbn.key, title.ifEmpty { text }, appIcon(pkg), chrono.first, chrono.second, pkg, n.contentIntent)
-            alert && !sbn.isOngoing && n.flags and Notification.FLAG_GROUP_SUMMARY == 0 && (title.isNotEmpty() || text.isNotEmpty()) -> {
-                val first = alerted.add(sbn.key)
-                if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0) {
-                    Island.flash = Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
-                        pkg = pkg, open = n.contentIntent, id = sbn.key, until = System.currentTimeMillis() + 4000)
+            // Google Maps: title is the distance to the next turn, large icon the turn arrow
+            nav -> Island.putOngoing(Ongoing(sbn.key, "nav", title, "", n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
+                WHITE, null, 3, pkg, n.contentIntent))
+            progress != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", "$progress%", appIcon(pkg),
+                BLUE, progress, 1, pkg, n.contentIntent))
+            else -> {
+                // an update that no longer qualifies (e.g. stopwatch paused, call ended) must not leave the old one showing
+                if (Island.call?.key == sbn.key) Island.call = null
+                if (Island.timer?.key == sbn.key) Island.timer = null
+                if (alert && !sbn.isOngoing && n.flags and Notification.FLAG_GROUP_SUMMARY == 0 && (title.isNotEmpty() || text.isNotEmpty())) {
+                    val first = alerted.add(sbn.key)
+                    if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0) {
+                        Island.flash = Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
+                            pkg = pkg, open = n.contentIntent, id = sbn.key, until = System.currentTimeMillis() + 4000)
+                    }
                 }
             }
         }
@@ -90,16 +114,25 @@ class MediaListener : NotificationListenerService() {
      * Chronometer (Google Clock's timers and stopwatch use custom RemoteViews).
      * shortcut: a paused custom-view timer still looks running; detecting pause needs per-app parsing.
      */
-    private fun chronometer(n: Notification): Pair<Long, Boolean>? {
+    private fun chronometer(key: String, n: Notification): Pair<Long, Boolean>? {
         val x = n.extras
         if (x.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
             return SystemClock.elapsedRealtime() + (n.`when` - System.currentTimeMillis()) to x.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
         }
         @Suppress("DEPRECATION")
         val rv = n.contentView ?: n.bigContentView ?: return null
-        val root = try { rv.apply(this, FrameLayout(this)) } catch (e: Exception) { return null }
-        return find(root)?.let { it.base to it.isCountDown }
+        // inflating another app's views on the main thread is costly; apps re-posting fast get at most one per second
+        // shortcut: a change within that second (e.g. a quick pause/resume) shows on the next post, upgrade if it matters
+        val now = SystemClock.uptimeMillis()
+        probes[key]?.takeIf { now - it.at < 1000 }?.let { return it.result }
+        val root = try { rv.apply(this, FrameLayout(this)) } catch (e: Exception) { null }
+        val result = root?.let { find(it) }?.let { it.base to it.isCountDown }
+        probes[key] = Probe(now, result)
+        return result
     }
+
+    private class Probe(val at: Long, val result: Pair<Long, Boolean>?)
+    private val probes = HashMap<String, Probe>()
 
     private fun find(v: View): Chronometer? =
         v as? Chronometer ?: (v as? ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
