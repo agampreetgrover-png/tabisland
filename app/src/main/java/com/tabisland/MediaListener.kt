@@ -32,16 +32,21 @@ class MediaListener : NotificationListenerService() {
     private val sessions = MediaSessionManager.OnActiveSessionsChangedListener { attach(best(it)) }
 
     override fun onListenerConnected() {
+        Island.listening = true; Island.syncHeadsUp(this) // the island shows notifications instead of the system banner
         val m = getSystemService(MediaSessionManager::class.java)
         msm = m
         m.addOnActiveSessionsChangedListener(sessions, me)
         attach(best(m.getActiveSessions(me)))
-        activeNotifications?.forEach { classify(it, alert = false) } // pick up a call/timer already running
+        // pick up a call/timer already running; existing keys count as alerted so ONLY_ALERT_ONCE updates stay quiet
+        activeNotifications?.forEach { alerted.add(it.key); classify(it, alert = false) }
     }
 
     override fun onListenerDisconnected() {
+        Island.listening = false; Island.syncHeadsUp(this) // island no longer gets notifications, give the system banners back
         msm?.removeOnActiveSessionsChangedListener(sessions)
         attach(null)
+        alerted.clear()
+        probes.clear()
         Island.call = null
         Island.timer = null
         Island.clearOngoing(keep = "torch") // no removal callbacks will arrive for these; torch isn't ours
@@ -58,10 +63,13 @@ class MediaListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         alerted.remove(sbn.key)
         probes.remove(sbn.key)
+        val hadSlot = Island.call?.key == sbn.key || Island.timer?.key == sbn.key
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
         if (Island.flash?.id == sbn.key) Island.flash = null
         Island.removeOngoing(sbn.key)
+        // one call/timer slot: another running call or stopwatch may have been hidden behind the one that ended
+        if (hadSlot) activeNotifications?.forEach { if (it.key != sbn.key && it.isOngoing) classify(it, alert = false) }
     }
 
     /** 0–100 for a determinate progress bar (downloads, uploads, installs), else null. */
@@ -76,13 +84,21 @@ class MediaListener : NotificationListenerService() {
         val n = sbn.notification
         val x = n.extras
         val pkg = sbn.packageName
-        if (pkg == packageName || x.containsKey(Notification.EXTRA_MEDIA_SESSION)) return // music comes from the session
+        if (pkg == packageName) return
+        if (x.containsKey(Notification.EXTRA_MEDIA_SESSION)) { // music comes from the session
+            // sessions-changed doesn't fire when an already-active session starts playing; its notification update does
+            msm?.let { attach(best(it.getActiveSessions(me))) }
+            return
+        }
         val title = x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (x.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: x.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
         val chrono = if (sbn.isOngoing) chronometer(sbn.key, n) else null
         val nav = sbn.isOngoing && n.category == Notification.CATEGORY_NAVIGATION
         val progress = if (sbn.isOngoing) progressOf(n) else null // a finished, dismissible "100%" isn't live
         if (!nav && progress == null) Island.removeOngoing(sbn.key) // e.g. a finished download
+        // an update that no longer qualifies (e.g. stopwatch paused, call ended, timer turned progress) must not leave the old one showing
+        if (Island.call?.key == sbn.key) Island.call = null
+        if (Island.timer?.key == sbn.key) Island.timer = null
         when {
             n.category == Notification.CATEGORY_CALL && sbn.isOngoing ->
                 Island.call = Call(sbn.key, title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
@@ -95,10 +111,11 @@ class MediaListener : NotificationListenerService() {
             progress != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", "$progress%", appIcon(pkg),
                 BLUE, progress, 1, pkg, n.contentIntent))
             else -> {
-                // an update that no longer qualifies (e.g. stopwatch paused, call ended) must not leave the old one showing
-                if (Island.call?.key == sbn.key) Island.call = null
-                if (Island.timer?.key == sbn.key) Island.timer = null
-                if (alert && !sbn.isOngoing && n.flags and Notification.FLAG_GROUP_SUMMARY == 0 && (title.isNotEmpty() || text.isNotEmpty())) {
+                // same rule as Notification.suppressAlertingDueToGrouping (default ALL: summaries stay quiet, as before)
+                val summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0
+                val muted = if (summary) n.group == null || n.groupAlertBehavior != Notification.GROUP_ALERT_SUMMARY
+                    else n.group != null && n.groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY
+                if (alert && !sbn.isOngoing && !muted && (title.isNotEmpty() || text.isNotEmpty())) {
                     val first = alerted.add(sbn.key)
                     if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0) {
                         Island.flash = Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),

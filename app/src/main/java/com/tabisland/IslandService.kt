@@ -3,6 +3,7 @@ package com.tabisland
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
 import android.app.ActivityOptions
+import android.app.KeyguardManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -51,6 +52,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private var expanded = false
     private var barsVisible = true
     private var battery = -1
+    private var dpi = 0
 
     private var cameraX = 0
 
@@ -72,7 +74,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     @SuppressLint("ClickableViewAccessibility")
     override fun onServiceConnected() {
         wm = getSystemService(WindowManager::class.java)
-        prefs = getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
+        dpi = resources.configuration.densityDpi
+        prefs =getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(this)
         island = IslandView(this, this)
         touchView = View(this).apply {
@@ -94,6 +97,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
         }
         // all actions here are protected system broadcasts, so no other app can send them
         registerReceiver(events, filter, RECEIVER_EXPORTED)
@@ -105,6 +110,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
 
     override fun onDestroy() {
         Island.onChange = null
+        Island.showing = false; Island.syncHeadsUp(this) // island gone: give the system banners back
+        Island.removeOngoing("torch") // torch callbacks stop with us; MediaListener keeps this key, a restart re-adds it if still on
         handler.removeCallbacksAndMessages(null)
         if (added) {
             unregisterReceiver(events)
@@ -139,7 +146,15 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (added) { place(); render() }
+        if (!added) return
+        if (newConfig.densityDpi != dpi) { // IslandView bakes pixel sizes in at construction: rebuild it
+            dpi = newConfig.densityDpi
+            island.show(null, false, false, true) // stops the old view's spring clock so it can't resize our windows
+            wm.removeView(island)
+            island = IslandView(this, this)
+            wm.addView(island, lp)
+        }
+        place(); render()
     }
 
     override fun onSharedPreferenceChanged(p: SharedPreferences?, key: String?) {
@@ -183,7 +198,9 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         if (!added) return
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
-        val live = Island.top(now) { prefs.getBoolean(it, true) }
+        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        // message text over the keyguard would bypass the system's "hide sensitive content" setting
+        val live = Island.top(now) { prefs.getBoolean(it, true) && !(locked && it == "notif") }
         val prev = shown
         if (live == null || prev == null || live::class != prev::class) expanded = false
         maybePeek(live, now)
@@ -191,6 +208,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val hidden = landscape || (!barsVisible && prefs.getBoolean("fullscreen", true))
+        // hidden (landscape, fullscreen), locked (messages dropped above) or notifications switched off: the system banner must show instead
+        Island.showing = !hidden && !locked && prefs.getBoolean("notif", true); Island.syncHeadsUp(this)
         Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$expanded hidden=$hidden")
         island.show(live, expanded, prefs.getBoolean("idle", true), hidden)
     }
@@ -257,7 +276,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         stopPeek()
         when (val l = shown) {
             is Media -> if (!expanded) { expanded = true; render() } else open(l.open)
-            is Flash -> { send(l.open); Island.flash = null }
+            is Flash -> { open(l.open); Island.flash = null }
             is Ongoing -> if (l.key == "torch") torchOff() else open(l.open)
             null -> {}
             else -> open(l.open)
@@ -301,6 +320,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     }
 
     private fun open(pi: PendingIntent?) {
+        // locked with a PIN: an activity opens behind the keyguard, but a broadcast/service would act without unlocking
+        if (pi != null && !pi.isActivity && getSystemService(KeyguardManager::class.java).isDeviceLocked) return
         send(pi)
         if (expanded) { expanded = false; render() }
     }
@@ -356,6 +377,10 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                 // closed lock grows out of the camera, springs open at ~0.45 s, then the pill shrinks back (~1.8 s in all)
                 Intent.ACTION_USER_PRESENT -> Island.flash = Flash("unlock", "", "", icon = UnlockDrawable(WHITE),
                     until = System.currentTimeMillis() + 1800)
+                // a message card still up at screen-off would otherwise reappear over the lock screen on wake
+                Intent.ACTION_SCREEN_OFF -> if (Island.flash?.key == "notif") Island.flash = null
+                // nothing else re-renders on lock: hand pop-ups back to the system while the keyguard is up
+                Intent.ACTION_SCREEN_ON -> render()
             }
         }
     }

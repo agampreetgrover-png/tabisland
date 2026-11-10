@@ -150,6 +150,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        Island.syncHeadsUp(this) // repairs a value left at 0 by a process killed without callbacks (force-stop)
         val a11y = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
             ?.contains("$packageName/") == true
         val notif = getSystemService(NotificationManager::class.java)

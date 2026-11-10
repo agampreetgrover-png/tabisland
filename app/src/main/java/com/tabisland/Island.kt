@@ -1,10 +1,14 @@
 package com.tabisland
 
+import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.media.session.MediaController
+import android.provider.Settings
 
 const val WHITE = 0xFFFFFFFF.toInt()
 const val GREEN = 0xFF30D158.toInt()
@@ -104,6 +108,20 @@ object Island {
     var controller: MediaController? = null
     var onChange: (() -> Unit)? = null
 
+    /** System pop-ups go off only while the island both gets notifications ([listening]) and can show them ([showing]). */
+    var listening = false
+    var showing = false
+    private var headsUpOff: Boolean? = null
+    fun syncHeadsUp(ctx: Context) {
+        val off = listening && showing
+        if (off == headsUpOff) return
+        // not granted: skip a settings IPC that would fail again on every render
+        if (ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) != PackageManager.PERMISSION_GRANTED) return
+        // needs `adb shell pm grant com.tabisland android.permission.WRITE_SECURE_SETTINGS`; without it both still show
+        try { Settings.Global.putInt(ctx.contentResolver, "heads_up_notifications_enabled", if (off) 0 else 1); headsUpOff = off }
+        catch (e: SecurityException) {}
+    }
+
     fun putOngoing(o: Ongoing) { ongoing[o.key] = o; onChange?.invoke() }
     fun removeOngoing(key: String) { if (ongoing.remove(key) != null) onChange?.invoke() }
     fun clearOngoing(keep: String) { if (ongoing.keys.retainAll { it == keep }) onChange?.invoke() }
@@ -112,13 +130,15 @@ object Island {
 }
 
 /**
- * Priority: call > flash > timer > navigation/flashlight > music > progress > idle (null).
+ * Priority: ringing call > flash > call in progress > timer > navigation/flashlight > music > progress > idle (null).
  * [on] answers the per-feature switches.
  */
 fun pick(call: Call?, flash: Flash?, timer: Timer?, ongoing: Collection<Ongoing>, media: Media?, now: Long, on: (String) -> Boolean): Live? {
     val top = ongoing.filter { on(it.pref) }.maxByOrNull { it.rank }
-    return call?.takeIf { on("call") }
+    // a call in progress is only a pill: messages must still pop over it, the system banners are off while the island runs
+    return call?.takeIf { on("call") && it.since == null }
         ?: flash?.takeIf { it.until > now && on(it.key) }
+        ?: call?.takeIf { on("call") }
         ?: timer?.takeIf { on("timer") }
         ?: top?.takeIf { it.rank >= 2 }
         ?: media?.takeIf { on("media") && (it.playing || now - it.lastPlayed < PAUSED_KEEP_MS) }

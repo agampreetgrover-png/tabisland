@@ -20,6 +20,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.media.session.MediaController
+import android.os.Build
 import android.os.SystemClock
 import android.text.TextUtils
 import android.view.GestureDetector
@@ -38,6 +39,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Space
 import android.widget.TextView
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -122,14 +124,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     // ---- expanded media card: blurred-art glow, art, caption, title, progress, controls ----
     private var media: Media? = null
     private var seeking = false
-    private val glow = ImageView(ctx).apply {
-        scaleType = ImageView.ScaleType.CENTER_CROP
-        alpha = 0.6f
-        setRenderEffect(RenderEffect.createBlurEffect(dp(48).toFloat(), dp(48).toFloat(), Shader.TileMode.CLAMP))
-    }
-    private val scrim = View(ctx).apply {
-        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x33000000, 0xAA000000.toInt(), 0xE6000000.toInt()))
-    }
+    private val glow = glowView()
+    private val scrim = scrimView()
     private val art = roundImage(dp(14))
     private val caption = label(11f, 700).apply { letterSpacing = 0.08f; isAllCaps = true }
     private val title = label(17f, 600).apply { letterSpacing = -0.01f }
@@ -175,15 +171,28 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
 
     // ---- incoming call card ----
     private val callIcon = roundImage(dp(26))
-    private val callCaption = label(11f, 700).apply { letterSpacing = 0.08f; isAllCaps = true; setTextColor(GREEN) }
+    private val callCaption = label(13f, 400).apply { setTextColor(GRAY) } // iOS: a quiet line above the name
     private val callName = label(20f, 600).apply { letterSpacing = -0.01f }
     private val callButtons = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-    private val callCard = LinearLayout(ctx).apply {
+    private var callSig: List<Pair<String, PendingIntent?>>? = null
+    private val callGlow = glowView() // the caller's photo, blurred, like album art behind the music card
+    private val callRow = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
+        clipToPadding = false // the ripple spills into the padding
         setPadding(dp(20), 0, dp(16), 0)
-        addView(callIcon, lp(52, 52))
+        // rings ripple out of the photo while it rings; negative margins keep the photo where it was
+        addView(FrameLayout(ctx).apply {
+            addView(Ripple(ctx).apply { inner = dp(26).toFloat() }, LayoutParams(MATCH, MATCH))
+            addView(callIcon, LayoutParams(dp(52), dp(52), Gravity.CENTER))
+        // negative margins on all sides: the rings overflow without making the row (and fit()) taller
+        }, lp(76, 76).apply { marginStart = -dp(12); marginEnd = -dp(12); topMargin = -dp(10); bottomMargin = -dp(10) })
         addView(column(callCaption, callName), LinearLayout.LayoutParams(0, WRAP, 1f))
         addView(callButtons)
+    }
+    private val callCard = FrameLayout(ctx).apply {
+        addView(callGlow, LayoutParams(MATCH, MATCH))
+        addView(scrimView(), LayoutParams(MATCH, MATCH))
+        addView(callRow, LayoutParams(MATCH, MATCH))
     }
 
     // ---- notification card ----
@@ -193,6 +202,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private val notifText = label(14f, 400).apply { maxLines = 2; setTextColor(LIGHT) }
     private val notifCard = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
+        // hidden from screen sharing while showing, like the system's own notifications
+        if (Build.VERSION.SDK_INT >= 35) contentSensitivity = View.CONTENT_SENSITIVITY_SENSITIVE
         setPadding(dp(18), dp(12), dp(20), dp(12))
         addView(notifIcon, lp(46, 46))
         addView(column(
@@ -218,12 +229,16 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         override fun run() {
             val m = media ?: return
             if (content !== mediaCard || !isAttachedToWindow) return
-            val pos = m.positionNow(SystemClock.elapsedRealtime()).coerceIn(0L, max(m.duration, 0L))
-            if (!seeking) seek.progress = pos.toInt()
-            elapsed.text = clockText(pos)
-            remaining.text = if (m.duration > 0) "-" + clockText(m.duration - pos) else ""
+            showPosition(m)
             postDelayed(this, 500)
         }
+    }
+
+    private fun showPosition(m: Media) {
+        val pos = m.positionNow(SystemClock.elapsedRealtime()).coerceIn(0L, max(m.duration, 0L))
+        if (!seeking) seek.progress = pos.toInt()
+        elapsed.text = clockText(pos)
+        remaining.text = if (m.duration > 0) "-" + clockText(m.duration - pos) else ""
     }
 
     private val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
@@ -276,7 +291,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         // cards start their content below the band that holds the camera hole, like the iPhone's expanded island
         val top = max(dp(20), pillH)
         mediaBody.setPadding(dp(20), top, dp(20), dp(8))
-        callCard.setPadding(dp(20), top, dp(16), dp(12))
+        callRow.setPadding(dp(20), top, dp(16), dp(12))
         notifCard.setPadding(dp(18), top, dp(20), dp(14))
     }
 
@@ -310,10 +325,16 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
 
     private fun bind(l: Live?, expanded: Boolean, idleOn: Boolean): Triple<View?, Int, Int> = when {
         l == null -> if (idleOn) Triple(null, idleW, pillH) else Triple(null, 0, 0)
-        l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, mediaBody.paddingTop + dp(178)) }
-        l is Call && l.since == null -> { bindCall(l); Triple(callCard, maxW, callCard.paddingTop + dp(68)) }
-        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, notifCard.paddingTop + dp(92)) }
+        l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, fit(mediaBody, dp(178))) }
+        l is Call && l.since == null -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(68))) }
+        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(92))) }
         else -> Triple(compact, gapW + 2 * bindCompact(l), pillH)
+    }
+
+    /** The design height below the camera band, or taller when a large font size needs it. */
+    private fun fit(body: View, h: Int): Int {
+        body.measure(MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        return max(body.paddingTop + h, body.measuredHeight)
     }
 
     /** Fills the compact row and returns one side's width (both sides equal, so the camera stays centred). */
@@ -382,24 +403,28 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         seek.progressDrawable = track(accent)
         seek.max = m.duration.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
         seek.visibility = if (m.duration > 0) VISIBLE else INVISIBLE // live streams have no duration
+        showPosition(m) // a drag reveals the card before the ticker runs
     }
 
     private fun bindCall(c: Call) {
         callIcon.setImageDrawable(c.icon)
+        callGlow.setImageDrawable(c.icon?.constantState?.newDrawable(resources)) // own copy: a drawable can't sit in two views
         callCaption.text = c.text.ifEmpty { "Incoming call" }
         callName.text = c.name
+        // same buttons already on screen: rebuilding would cancel a press in progress
+        val sig = c.actions.map { it.title.toString() to it.actionIntent }
+        if (sig == callSig && content === callCard) return
+        callSig = sig
         callButtons.removeAllViews()
         val pair = c.actions.size == 2 // CallStyle: decline first, answer last
         c.actions.forEachIndexed { i, a ->
             val answer = c.actions.size > 1 && i == c.actions.lastIndex
             val color = if (answer) GREEN else RED
             val b: View = if (pair) {
-                ImageView(context).apply {
-                    setImageResource(if (answer) R.drawable.ic_call else R.drawable.ic_call_end)
-                    imageTintList = ColorStateList.valueOf(WHITE)
+                // iconButton gives the same press-in feedback as the media controls
+                iconButton(if (answer) R.drawable.ic_call else R.drawable.ic_call_end, a.title.toString(), 13) { host.send(a.actionIntent) }.apply {
                     background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
-                    setPadding(dp(13), dp(13), dp(13), dp(13))
-                    contentDescription = a.title
+                    if (answer) rock(this)
                 }
             } else {
                 label(13f, 600).apply {
@@ -407,12 +432,25 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
                     gravity = Gravity.CENTER
                     setPadding(dp(16), 0, dp(16), 0)
                     background = GradientDrawable().apply { cornerRadius = dp(19).toFloat(); setColor(color) }
+                    setOnClickListener { host.send(a.actionIntent) }
                 }
             }
-            b.setOnClickListener { host.send(a.actionIntent) }
             callButtons.addView(b, if (pair) lp(50, 50).apply { marginStart = dp(12) }
                 else LinearLayout.LayoutParams(WRAP, dp(38)).apply { marginStart = dp(8) })
         }
+    }
+
+    /** The answer glyph rocks like a ringing handset: a short burst every 1.8 s, in step with the ripple. */
+    private fun rock(v: View) {
+        if (!ValueAnimator.areAnimatorsEnabled()) return
+        v.post(object : Runnable {
+            override fun run() {
+                if (!v.isAttachedToWindow || !v.isShown) { v.rotation = 0f; return } // card gone: stop
+                val t = SystemClock.uptimeMillis() % 1800 / 500f
+                v.rotation = if (t < 1f) 14f * sin(t * 6 * PI).toFloat() * (1f - t) else 0f
+                v.postOnAnimation(this)
+            }
+        })
     }
 
     private fun bindNotif(f: Flash) {
@@ -452,6 +490,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val dragged = v.visibility == VISIBLE && v.alpha > 0f // already half-revealed by a drag: continue from there
         v.visibility = VISIBLE
         if (dragged) {
+            blurs.remove(v)?.cancel(); v.setRenderEffect(null) // may be mid-dematerialize: stop its blur too
             settleChildren(v)
         } else {
             v.alpha = 0f; v.scaleX = 0.9f; v.scaleY = 0.9f
@@ -475,7 +514,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             }
             return
         }
-        val rows = if (v === mediaCard) mediaBody else v as LinearLayout
+        val rows = when (v) { mediaCard -> mediaBody; callCard -> callRow; else -> v as LinearLayout }
         for (i in 0 until rows.childCount) {
             val row = rows.getChildAt(i)
             row.animate().cancel()
@@ -490,6 +529,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val rows = when (v) {
             compact -> listOf(compactLeft, compactRight)
             mediaCard -> (0 until mediaBody.childCount).map { mediaBody.getChildAt(it) }
+            callCard -> (0 until callRow.childCount).map { callRow.getChildAt(it) }
             else -> (v as LinearLayout).let { g -> (0 until g.childCount).map { g.getChildAt(it) } }
         }
         for (r in rows) { r.animate().cancel(); r.alpha = 1f; r.translationX = 0f; r.translationY = 0f }
@@ -533,7 +573,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         if (open == (dy > 0)) return false
         bindMedia(m)
         val pillW = gapW + 2 * bindCompact(m)
-        val cardH = mediaBody.paddingTop + dp(178)
+        val cardH = fit(mediaBody, dp(178))
         sizeContent(compact, pillW, pillH)
         sizeContent(mediaCard, maxW, cardH)
         val d = if (open) Drag(maxW, cardH, pillW, pillH, mediaCard, compact) else Drag(pillW, pillH, maxW, cardH, compact, mediaCard)
@@ -559,7 +599,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val range = (d.toH - d.fromH).toFloat()
         val raw = (e.rawY - downY) / range
         // rubber band past either end: resist instead of stopping dead
-        val p = when { raw < 0f -> raw * 0.25f; raw > 1f -> 1f + (raw - 1f) * 0.25f; else -> raw }
+        // capped so the overshoot stays inside the dp(48) canvas margin and on screen
+        val p = when { raw < 0f -> raw * 0.25f; raw > 1f -> 1f + (raw - 1f) * 0.25f; else -> raw }.coerceIn(-0.05f, 1.05f)
         when (e.actionMasked) {
             MotionEvent.ACTION_MOVE -> follow(d, p)
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> release(d, p, e.actionMasked == MotionEvent.ACTION_UP)
@@ -704,6 +745,16 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         }
     }
 
+    private fun glowView() = ImageView(context).apply {
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        alpha = 0.6f
+        setRenderEffect(RenderEffect.createBlurEffect(dp(48).toFloat(), dp(48).toFloat(), Shader.TileMode.CLAMP))
+    }
+
+    private fun scrimView() = View(context).apply {
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x33000000, 0xAA000000.toInt(), 0xE6000000.toInt()))
+    }
+
     private fun appIcon(pkg: String): Drawable? = try { context.packageManager.getApplicationIcon(pkg) } catch (e: Exception) { null }
 
     private fun appName(pkg: String): String? = try {
@@ -778,6 +829,27 @@ private class Waveform(ctx: Context) : View(ctx) {
             c.drawLine(x, height / 2f - half, x, height / 2f + half, paint)
         }
         if (playing && isShown) postInvalidateOnAnimation()
+    }
+}
+
+/** Green rings that ripple out from the caller's photo while it rings. Only animates while on screen. */
+private class Ripple(ctx: Context) : View(ctx) {
+    var inner = 0f // photo radius: rings start at its edge
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = GREEN }
+
+    override fun onDraw(c: Canvas) {
+        if (!ValueAnimator.areAnimatorsEnabled()) return // reduced motion: no rings
+        val cx = width / 2f
+        val cy = height / 2f
+        val t = SystemClock.uptimeMillis() % 1800 / 1800f
+        for (k in 0..1) {
+            val p = (t + k * 0.5f) % 1f
+            val e = 1f - (1f - p) * (1f - p) // ease out: fast from the photo, slowing as it fades
+            paint.strokeWidth = resources.displayMetrics.density * 2f * (1f - p)
+            paint.alpha = ((1f - p) * 150).toInt()
+            c.drawCircle(cx, cy, inner + (min(cx, cy) - inner) * e, paint)
+        }
+        if (isShown) postInvalidateOnAnimation()
     }
 }
 

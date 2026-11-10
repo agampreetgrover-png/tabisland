@@ -18,6 +18,13 @@ class IslandTest {
 
     @Test fun callBeatsEverything() = assertSame(call, pick(call, flash(), timer, listOf(nav), media(true), now, all))
 
+    @Test fun flashBeatsAnsweredCall() {
+        val answered = Call("c", "Mom", "", null, emptyList(), 0L, "dialer", null)
+        val f = flash()
+        assertSame(f, pick(answered, f, timer, emptyList(), null, now, all))
+        assertSame(answered, pick(answered, flash(until = now), timer, emptyList(), null, now, all))
+    }
+
     @Test fun flashBeatsTimerUntilItExpires() {
         val f = flash()
         assertSame(f, pick(null, f, timer, emptyList(), null, now, all))
