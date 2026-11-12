@@ -15,10 +15,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Chronometer
-import android.widget.FrameLayout
+import android.text.format.DateUtils
 
 /** Feeds Island with music (media sessions), calls, timers and notification popups. Nothing leaves the device. */
 class MediaListener : NotificationListenerService() {
@@ -53,7 +50,6 @@ class MediaListener : NotificationListenerService() {
         attach(null)
         alerted.clear()
         popped.clear()
-        probes.clear()
         Island.call = null
         Island.timer = null
         Island.clearOngoing(keep = "torch") // no removal callbacks will arrive for these; torch isn't ours
@@ -77,7 +73,6 @@ class MediaListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         alerted.remove(sbn.key)
         popped.remove(sbn.key)
-        probes.remove(sbn.key)
         val hadSlot = Island.call?.key == sbn.key || Island.timer?.key == sbn.key
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
@@ -109,7 +104,9 @@ class MediaListener : NotificationListenerService() {
         }
         val title = x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (x.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: x.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-        val chrono = if (sbn.isOngoing) chronometer(sbn.key, pkg, n) else null
+        val chrono = if (sbn.isOngoing) chronometer(n) else null
+        // a paused MetricStyle timer or stopwatch keeps only the frozen time: a still pill instead of a running one
+        val paused = if (sbn.isOngoing && chrono == null) metric(n)?.takeIf { it.containsKey("pausedDuration") }?.getLong("pausedDuration") else null
         val nav = sbn.isOngoing && n.category == Notification.CATEGORY_NAVIGATION
         val progress = if (sbn.isOngoing) progressOf(n) else null // a finished, dismissible "100%" isn't live
         if (!nav && progress == null) Island.removeOngoing(sbn.key) // e.g. a finished download
@@ -120,9 +117,9 @@ class MediaListener : NotificationListenerService() {
         // alarms, reminders and full-screen alerts are ongoing, so the message path below never pops them
         val alarm = sbn.isOngoing && n.category != Notification.CATEGORY_CALL && (n.fullScreenIntent != null ||
             n.category == Notification.CATEGORY_ALARM || n.category == Notification.CATEGORY_REMINDER)
-        // a running timer or stopwatch (Google Clock files them as alarms, text in custom views) is the timer pill, not
-        // a 60 s blank card; a full-screen alert with no text still shows its app
-        if (alert && alarm && (chrono == null || n.fullScreenIntent != null) &&
+        // a running or paused timer or stopwatch is the timer pill, not a 60 s blank card; a full-screen alert with no
+        // text still shows its app
+        if (alert && alarm && (chrono == null && paused == null || n.fullScreenIntent != null) &&
             (title.isNotEmpty() || text.isNotEmpty() || n.fullScreenIntent != null) && alerted.add(sbn.key)) {
             pop(sbn, title.ifEmpty { if (text.isEmpty()) appLabel(pkg) else "" }, text, 60_000)
         }
@@ -137,8 +134,9 @@ class MediaListener : NotificationListenerService() {
                     n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
                     pkg, n.contentIntent ?: n.fullScreenIntent, ringing)
             }
-            sbn.isOngoing && chrono != null ->
-                Island.timer = Timer(sbn.key, title.ifEmpty { text }, appIcon(pkg), chrono.first, chrono.second, pkg, n.contentIntent)
+            sbn.isOngoing && (chrono != null || paused != null) -> Island.timer = Timer(sbn.key,
+                paused?.let { "Paused " + DateUtils.formatElapsedTime(it / 1000) } ?: title.ifEmpty { text },
+                appIcon(pkg), chrono?.first, chrono?.second ?: false, pkg, n.contentIntent)
             // Google Maps: title is the distance to the next turn, large icon the turn arrow
             nav -> Island.putOngoing(Ongoing(sbn.key, "nav", title, "", n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
                 WHITE, null, 3, pkg, n.contentIntent))
@@ -190,34 +188,22 @@ class MediaListener : NotificationListenerService() {
     private fun callAction(x: Bundle, extra: String, title: String) =
         (x.getParcelable(extra) as? PendingIntent)?.let { Notification.Action.Builder(null as Icon?, title, it).build() }
 
-    /**
-     * (elapsedRealtime base, countDown) from a standard chronometer notification, or from a custom view's
-     * Chronometer (Google Clock's timers and stopwatch use custom RemoteViews).
-     * shortcut: a paused custom-view timer still looks running; detecting pause needs per-app parsing.
-     */
-    private fun chronometer(key: String, pkg: String, n: Notification): Pair<Long, Boolean>? {
+    /** (elapsedRealtime base, countDown) from a chronometer notification or a running MetricStyle time. */
+    private fun chronometer(n: Notification): Pair<Long, Boolean>? {
         val x = n.extras
         if (x.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
             return SystemClock.elapsedRealtime() + (n.`when` - System.currentTimeMillis()) to x.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
         }
-        if (pkg != "com.google.android.deskclock") return null // on the Pixel only Google Clock hides its chronometer in custom views
-        @Suppress("DEPRECATION")
-        val rv = n.contentView ?: n.bigContentView ?: return null
-        // inflating another app's views on the main thread is costly; apps re-posting fast get at most one per second
-        // shortcut: a change within that second (e.g. a quick pause/resume) shows on the next post, upgrade if it matters
-        val now = SystemClock.uptimeMillis()
-        probes[key]?.takeIf { now - it.at < 1000 }?.let { return it.result }
-        val root = try { rv.apply(this, FrameLayout(this)) } catch (e: Exception) { null }
-        val result = root?.let { find(it) }?.let { it.base to it.isCountDown }
-        probes[key] = Probe(now, result)
-        return result
+        val v = metric(n) ?: return null
+        return if (v.containsKey("zeroElapsedRealtime")) v.getLong("zeroElapsedRealtime") to v.getBoolean("countDown") else null
     }
 
-    private class Probe(val at: Long, val result: Pair<Long, Boolean>?)
-    private val probes = HashMap<String, Probe>()
-
-    private fun find(v: View): Chronometer? =
-        v as? Chronometer ?: (v as? ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+    /**
+     * The first metric's value of a MetricStyle notification (Google Clock's timers and stopwatch on Android 16+): no
+     * chronometer, no text, the time is in "android.metrics". Notification.Metric isn't in SDK 36, so read the bundle.
+     */
+    private fun metric(n: Notification): Bundle? =
+        n.extras.getParcelableArrayList("android.metrics", Bundle::class.java)?.firstOrNull()?.getBundle("value")
 
     private fun appIcon(pkg: String): Drawable? =
         try { packageManager.getApplicationIcon(pkg) } catch (e: PackageManager.NameNotFoundException) { null }
