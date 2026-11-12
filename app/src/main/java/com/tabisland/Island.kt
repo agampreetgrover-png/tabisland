@@ -24,8 +24,11 @@ sealed interface Live {
     val open: PendingIntent?
 }
 
-/** Short popup: notifications and system events. [key] is its settings switch, [id] the notification key, [level] a 0–100 ring. */
-class Flash(
+/**
+ * Short popup: notifications and system events. [key] is its settings switch, [id] the notification key, [level] a 0–100 ring.
+ * [actions] are the notification's buttons; [autoCancel] means tapping it should cancel the notification.
+ */
+data class Flash(
     val key: String,
     val title: String,
     val text: String,
@@ -36,9 +39,11 @@ class Flash(
     override val open: PendingIntent? = null,
     val id: String? = null,
     val until: Long,
+    val actions: List<Notification.Action> = emptyList(),
+    val autoCancel: Boolean = false,
 ) : Live
 
-/** [since] is the chronometer base (elapsedRealtime) once answered; null while ringing. */
+/** [since] is the chronometer base (elapsedRealtime) once answered; null while ringing or dialing. [ringing]: incoming, unanswered. */
 class Call(
     val key: String,
     val name: String,
@@ -48,6 +53,7 @@ class Call(
     val since: Long?,
     override val pkg: String?,
     override val open: PendingIntent?,
+    val ringing: Boolean = since == null,
 ) : Live
 
 /** [base] is the chronometer base (elapsedRealtime); null means show [label] instead. */
@@ -103,10 +109,20 @@ object Island {
     var media: Media? = null
         set(v) { field = v; onChange?.invoke() }
     var flash: Flash? = null
-        set(v) { field = v; onChange?.invoke() }
+        private set(v) { field = v; onChange?.invoke() }
+    private val queue = ArrayDeque<Pair<Flash, Long>>() // waiting flashes, each with how long it shows
+    private var flashMs = 0L // how long the current flash shows: a ringing call puts it back in the queue with it
     private val ongoing = LinkedHashMap<String, Ongoing>()
     var controller: MediaController? = null
     var onChange: (() -> Unit)? = null
+    /** Cancels a notification by key; set while MediaListener is connected. */
+    var cancel: ((String) -> Unit)? = null
+    /** Demo mode: the service treats every feature switch as on. */
+    var demo = false
+        set(v) { field = v; onChange?.invoke() }
+    /** A calibration slider is being touched: the service shows the idle pill even with "idle" off. */
+    var calibrating = false
+        set(v) { field = v; onChange?.invoke() }
 
     /** System pop-ups go off only while the island both gets notifications ([listening]) and can show them ([showing]). */
     var listening = false
@@ -126,7 +142,51 @@ object Island {
     fun removeOngoing(key: String) { if (ongoing.remove(key) != null) onChange?.invoke() }
     fun clearOngoing(keep: String) { if (ongoing.keys.retainAll { it == keep }) onChange?.invoke() }
 
-    fun top(now: Long, on: (String) -> Boolean) = pick(call, flash, timer, ongoing.values, media, now, on)
+    /** Shows [f] now, or queues it behind a live flash. An update of the same flash (key and id) replaces it instead. */
+    fun post(f: Flash) {
+        val now = System.currentTimeMillis()
+        val cur = flash
+        // volume steps or a chat's next message must not line up behind their own stale copy
+        queue.removeAll { it.first.key == f.key && it.first.id == f.id }
+        val live = cur != null && cur.until > now
+        if (cur != null && cur.key == f.key && cur.id == f.id || !live && queue.isEmpty()) { flashMs = f.until - now; flash = f; return }
+        queue.addLast(f to f.until - now)
+        if (queue.size > 5) queue.removeFirst()
+        // the live flash may be one whose switch is off: render anyway, so top() can move past it
+        if (!live) next(now) else onChange?.invoke()
+    }
+
+    fun dismissFlash() = next(System.currentTimeMillis())
+    /** Dismisses [f] only while it (or an update of it) is still up: a tap on a stale card mustn't take the next one. */
+    fun dismissFlash(f: Flash) {
+        if (flash?.let { it === f || it.id != null && it.key == f.key && it.id == f.id } == true) dismissFlash()
+    }
+    fun removeFlash(id: String) = drop { it.id == id }
+    fun clearFlashes(key: String) = drop { it.key == key }
+
+    private fun drop(match: (Flash) -> Boolean) {
+        queue.removeAll { match(it.first) }
+        if (flash?.let(match) == true) dismissFlash()
+    }
+
+    // a queued flash gets its full time from when it actually shows
+    private fun next(now: Long) {
+        val n = queue.removeFirstOrNull()
+        flashMs = n?.second ?: 0L
+        flash = n?.let { (f, ms) -> f.copy(until = now + ms) }
+    }
+
+    fun top(now: Long, on: (String) -> Boolean): Live? {
+        if (call?.let { it.ringing && on("call") } == true) {
+            // the ringing call covers every flash: park a message, unseen, at the head of the queue with its full
+            // time instead of letting it run out under the call; system events (unlock, charging) are stale by then
+            flash?.let { f -> if (f.key == "notif" && f.until > now) queue.addFirst(f to flashMs); flash = null }
+        } else {
+            // a flash whose switch is off is never seen: it mustn't hold back the ones queued behind it
+            while (queue.isNotEmpty() && flash.let { it == null || it.until <= now || !on(it.key) }) next(now)
+        }
+        return pick(call, flash, timer, ongoing.values, media, now, on)
+    }
 }
 
 /**
@@ -136,7 +196,7 @@ object Island {
 fun pick(call: Call?, flash: Flash?, timer: Timer?, ongoing: Collection<Ongoing>, media: Media?, now: Long, on: (String) -> Boolean): Live? {
     val top = ongoing.filter { on(it.pref) }.maxByOrNull { it.rank }
     // a call in progress is only a pill: messages must still pop over it, the system banners are off while the island runs
-    return call?.takeIf { on("call") && it.since == null }
+    return call?.takeIf { on("call") && it.ringing }
         ?: flash?.takeIf { it.until > now && on(it.key) }
         ?: call?.takeIf { on("call") }
         ?: timer?.takeIf { on("timer") }

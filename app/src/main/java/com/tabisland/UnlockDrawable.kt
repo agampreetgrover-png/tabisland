@@ -36,9 +36,11 @@ class UnlockDrawable(color: Int) : Drawable() {
     override fun draw(c: Canvas) {
         if (!started) { started = true; play() }
         val b = bounds
-        val s = min(b.width(), b.height()).toFloat()
+        // 0.66: the shackle at its overshoot (lifted 0.24, swung 31°) reaches 0.25 above the lock and 0.51 left of
+        // centre; popped 1.18× that must stay inside the bounds and the 11dp corners of the slot's clipToOutline
+        val s = min(b.width(), b.height()) * 0.66f
         val cx = b.exactCenterX()
-        val top = b.top + (b.height() - s) / 2
+        val top = b.exactCenterY() - s * 0.344f // centres the lock's full travel, from the raised shackle down to the body
         c.save()
         c.scale(pop, pop, cx, b.exactCenterY())
 

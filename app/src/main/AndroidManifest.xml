@@ -25,6 +25,24 @@
             </intent-filter>
         </activity>
 
+        <!-- inline reply for message-card actions: the overlay window can't take keyboard focus -->
+        <activity
+            android:name=".ReplyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- invisible: asks to dismiss the keyguard, then opens what the island tap pointed at -->
+        <activity
+            android:name=".UnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".IslandService"
             android:exported="true"

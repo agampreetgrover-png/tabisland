@@ -46,6 +46,7 @@ object Demo {
 
     fun show(ctx: Context, style: String) {
         clear()
+        Island.demo = true // the demo shows even when its own switch is off
         val now = System.currentTimeMillis()
         val appIcon = ctx.packageManager.getApplicationIcon(ctx.packageName)
         when (style) {
@@ -66,8 +67,8 @@ object Demo {
             })
             // after clear() only a real call/timer can be here; never overwrite it, clear() couldn't give it back
             "incall" -> if (Island.call == null) Island.call = Call(CALL, "Mom", "", appIcon, listOf(action("Hang up")), SystemClock.elapsedRealtime() - 42_000, null, null)
-            "notif" -> Island.flash = Flash("notif", "Mom", "Are you coming home for dinner tonight? I made your favourite.",
-                appIcon, pkg = ctx.packageName, id = FLASH, until = now + SHOW_MS)
+            "notif" -> Island.post(Flash("notif", "Mom", "Are you coming home for dinner tonight? I made your favourite.",
+                appIcon, pkg = ctx.packageName, id = FLASH, until = now + SHOW_MS))
             "timer" -> if (Island.timer == null) Island.timer = Timer(TIMER, "Timer", ctx.tinted(R.drawable.ic_timer, ORANGE),
                 SystemClock.elapsedRealtime() + 5 * 60_000, true, null, null)
             "nav" -> Island.putOngoing(Ongoing(NAV, "nav", "200 m", "", ctx.tinted(R.drawable.ic_turn_right, WHITE), WHITE, null, 3, null, null))
@@ -76,7 +77,7 @@ object Demo {
             "charge" -> flash(ctx, R.drawable.ic_bolt, "Charging", "80%", GREEN, 80)
             "battery" -> flash(ctx, R.drawable.ic_battery_alert, "Low Battery", "20%", RED, 20)
             "silent" -> flash(ctx, R.drawable.ic_bell_off, "Silent", "On", RED, null)
-            "unlock" -> Island.flash = Flash("preview", "", "", icon = UnlockDrawable(WHITE), id = FLASH, until = now + 1800)
+            "unlock" -> Island.post(Flash("preview", "", "", icon = UnlockDrawable(WHITE), id = FLASH, until = now + 1800))
         }
         handler.postDelayed({ clear() }, SHOW_MS)
     }
@@ -86,10 +87,11 @@ object Demo {
         handler.removeCallbacksAndMessages(null)
         if (Island.call?.key == CALL) Island.call = null
         if (Island.timer?.key == TIMER) Island.timer = null
-        if (Island.flash?.id == FLASH) Island.flash = null
+        Island.removeFlash(FLASH)
         Island.removeOngoing(NAV)
         Island.removeOngoing(DOWNLOAD)
         Island.removeOngoing(TORCH)
+        Island.demo = false
     }
 
     /** Counts 0→100% over 5 s so the ring can be seen filling. Rank 2 so it shows even while music plays. */
@@ -98,13 +100,12 @@ object Demo {
         if (pct < 100) handler.postDelayed({ download(icon, pct + 5) }, 250)
     }
 
-    // "preview" is always on, so system-popup demos show even if that popup's own switch is off
     private fun flash(ctx: Context, icon: Int, title: String, text: String, accent: Int, level: Int?) {
-        Island.flash = Flash("preview", title, text, icon = ctx.tinted(icon, accent), accent = accent, level = level,
-            id = FLASH, until = System.currentTimeMillis() + 3000)
+        Island.post(Flash("preview", title, text, icon = ctx.tinted(icon, accent), accent = accent, level = level,
+            id = FLASH, until = System.currentTimeMillis() + 3000))
     }
 
-    // the demo call's buttons do nothing: there is no real call behind them
+    // since = null: an incoming, ringing call. Its buttons do nothing: there is no real call behind them
     private fun call(name: String, icon: Drawable) {
         if (Island.call == null) Island.call = Call(CALL, name, "Incoming call", icon, listOf(action("Decline"), action("Answer")), null, null, null)
     }

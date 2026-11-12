@@ -3,6 +3,7 @@ package com.tabisland
 import android.animation.TimeAnimator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.res.ColorStateList
@@ -78,9 +79,16 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         fun swipeUp()
         fun media(action: (MediaController.TransportControls) -> Unit)
         fun send(pi: PendingIntent?)
+        /** A button on message card [f] was tapped. */
+        fun action(f: Flash, a: Notification.Action)
+        /** The finger lifted off the pill, after any tap/longPress/swipeUp it made: renders were held until now. */
+        fun released()
     }
 
     var haptics = true
+    /** A finger is down on the pill (or a button in it): the service holds renders so nothing changes under it. */
+    var held = false
+        private set
     private var pillH = dp(34)
     private var gapW = dp(34)
     private var idleW = dp(34)
@@ -89,9 +97,15 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private val bg = GradientDrawable().apply { setColor(Color.BLACK) }
     // no drop shadow: its margin would make a touchable dead zone around cards where taps can't reach the app below
     private val pill: FrameLayout = object : FrameLayout(ctx) {
-        override fun dispatchTouchEvent(e: MotionEvent): Boolean { track(e); return super.dispatchTouchEvent(e) }
-        // steal vertical drags from the card's buttons/seek bar so the whole card can be dragged closed
-        override fun onInterceptTouchEvent(e: MotionEvent) = e.actionMasked == MotionEvent.ACTION_MOVE && beginDrag(e)
+        override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+            track(e)
+            val end = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
+            if (end) held = false // the gesture's own tap or drag release must render normally
+            return super.dispatchTouchEvent(e).also { if (end) host.released() }
+        }
+        // steal vertical drags from the card's buttons/seek bar so the whole card can be dragged closed, and an
+        // upward flick that starts on a message card's buttons so it can still be swiped away
+        override fun onInterceptTouchEvent(e: MotionEvent) = e.actionMasked == MotionEvent.ACTION_MOVE && (beginDrag(e) || stealFlick(e))
     }.apply { background = bg; clipToOutline = true }
 
     // ---- compact: [icon text] [camera gap] [text ring | waveform | chronometer] ----
@@ -100,7 +114,10 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private val rightText = label(14f, 600).apply { fontFeatureSettings = "tnum" }
     private val ring = Ring(ctx)
     private val wave = Waveform(ctx)
-    private val chrono = Chronometer(ctx).apply { textSize = 14f; typeface = font(600); fontFeatureSettings = "tnum" }
+    private val chrono = Chronometer(ctx).apply { textSize = 14f; typeface = font(600); fontFeatureSettings = "tnum"; maxLines = 1 }
+    private var chronoLen = 0
+    private var last: (() -> Unit)? = null // the last show(), re-run when the chronometer outgrows its measured width
+    private var quiet = false // that re-run: the pill grows by a digit, which is no event to buzz for
     private val gap = Space(ctx)
     private val compactLeft = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
@@ -124,6 +141,9 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     // ---- expanded media card: [art title/artist waveform], [time ━━━ time], [app ⏮ ⏯ ⏭] ----
     private var media: Media? = null
     private var seeking = false
+    private var seekTo: Long? = null
+    private var seekAt = 0L
+    private var seekAccent = 0
     private val glow = glowView()
     private val scrim = scrimView()
     private val art = roundImage(dp(12))
@@ -155,7 +175,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(LinearLayout(ctx).apply {
             gravity = Gravity.CENTER_VERTICAL
             addView(elapsed)
-            addView(seek, LinearLayout.LayoutParams(0, dp(22), 1f).apply { marginStart = dp(10); marginEnd = dp(10) })
+            // a "scrolling container" to AbsSeekBar: it waits for horizontal slop instead of claiming the touch on
+            // down, so a vertical drag that starts on the bar can still close the card
+            addView(object : FrameLayout(ctx) { override fun shouldDelayChildPressedState() = true }.apply {
+                addView(seek, LayoutParams(MATCH, MATCH))
+            }, LinearLayout.LayoutParams(0, dp(22), 1f).apply { marginStart = dp(10); marginEnd = dp(10) })
             addView(remaining)
         }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(10) })
         // the app sits where the reference has its star; an equal space on the right keeps the controls centred
@@ -196,6 +220,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(callButtons)
     }
     private val callCard = FrameLayout(ctx).apply {
+        if (Build.VERSION.SDK_INT >= 35) contentSensitivity = View.CONTENT_SENSITIVITY_SENSITIVE // caller name and photo
         addView(callGlow, LayoutParams(MATCH, MATCH))
         addView(scrimView(), LayoutParams(MATCH, MATCH))
         addView(callRow, LayoutParams(MATCH, MATCH))
@@ -209,6 +234,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     // a name too long for the space left of the camera gets its own full-width line instead of being cut
     private val notifTitleLong = label(17f, 600).apply { maxLines = 2; visibility = GONE }
     private var notifTint = 0
+    private var notifFor: Flash? = null
+    private val notifActions = LinearLayout(ctx).apply { visibility = GONE }
     private val notifGap = Space(ctx) // the camera's width, set in geometry()
     private val notifBand = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
@@ -228,6 +255,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(notifBand)
         addView(notifTitleLong, LinearLayout.LayoutParams(MATCH, WRAP))
         addView(notifText, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(4) })
+        addView(notifActions, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(12) })
     }
 
     // ---- motion state ----
@@ -239,6 +267,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private val blurs = HashMap<View, ValueAnimator>()
     private val clock = TimeAnimator().apply { setTimeListener { _, _, dt -> frame(dt) } }
     private val startClock = Runnable { if (!clock.isStarted) clock.start() }
+    private var startAt = 0L // uptime the delayed startClock is due
+    private var canvasH = 0
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -250,8 +280,16 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     private fun showPosition(m: Media) {
-        val pos = m.positionNow(SystemClock.elapsedRealtime()).coerceIn(0L, max(m.duration, 0L))
-        if (!seeking) seek.progress = pos.toInt()
+        val now = SystemClock.elapsedRealtime()
+        var pos = m.positionNow(now)
+        seekTo?.let { t ->
+            val goal = t + if (m.playing) ((now - seekAt) * m.speed).toLong() else 0L
+            // until the player reports the jump, its stale position would snap the bar back
+            if (abs(pos - goal) > 1500 && now - seekAt < 2000) pos = goal else seekTo = null
+        }
+        if (seeking) pos = seek.progress.toLong()
+        pos = pos.coerceIn(0L, max(m.duration, 0L))
+        seek.progress = pos.toInt()
         elapsed.text = clockText(pos)
         remaining.text = if (m.duration > 0) "-" + clockText(m.duration - pos) else ""
     }
@@ -267,7 +305,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             if (vy < -dp(400)) host.swipeUp()
             return true
         }
-    })
+    }).apply { setOnDoubleTapListener(null) } // otherwise a quick second tap is eaten as a double tap
 
     init {
         addView(pill, LayoutParams(0, 0, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
@@ -291,9 +329,18 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             override fun onStopTrackingTouch(s: SeekBar) {
                 seeking = false
                 val to = s.progress.toLong()
+                seekTo = to; seekAt = SystemClock.elapsedRealtime()
                 host.media { it.seekTo(to) }
             }
         })
+        chrono.setOnChronometerTickListener {
+            // 59:59 -> 1:00:00, or a countdown going negative: the pill must grow to fit. Posted: a show() from inside
+            // the tick would restart the chronometer while its own tick is still queuing the next, doubling the ticks.
+            if (!held && it.visibility == VISIBLE && it.text.length != chronoLen) {
+                chronoLen = it.text.length
+                post { quiet = true; try { last?.invoke() } finally { quiet = false } }
+            }
+        }
     }
 
     /** Sizes measured from the camera cutout by the service. */
@@ -318,9 +365,14 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     fun show(live: Live?, expanded: Boolean, idleOn: Boolean, hidden: Boolean) {
+        last = { show(live, expanded, idleOn, hidden) }
         if (hidden) {
-            removeCallbacks(startClock)
+            removeCallbacks(startClock); startAt = 0
             clock.cancel()
+            // a drag cut short by hiding would otherwise make every later show() return early
+            drag?.to?.visibility = GONE
+            drag = null
+            velocity?.recycle(); velocity = null
             pill.visibility = GONE
             content?.visibility = GONE
             content = null
@@ -328,7 +380,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             ph.value = 0f; ph.target = 0f; ph.velocity = 0f
             size(0, 0)
             host.touch(0, 0, false)
-            host.canvas(0)
+            canvas(0)
             return
         }
         if (drag != null) return // the finger owns the island; the release re-renders
@@ -348,7 +400,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private fun bind(l: Live?, expanded: Boolean, idleOn: Boolean): Triple<View?, Int, Int> = when {
         l == null -> if (idleOn) Triple(null, idleW, pillH) else Triple(null, 0, 0)
         l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, fit(mediaBody, dp(148))) }
-        l is Call && l.since == null -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(52))) }
+        l is Call && l.ringing && expanded -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(52))) }
         l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(100))) }
         else -> Triple(compact, gapW + 2 * bindCompact(l), pillH)
     }
@@ -370,11 +422,18 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         chrono.stop(); chrono.visibility = GONE
         when (l) {
             is Media -> {
-                icon = l.art?.let { BitmapDrawable(resources, it) }
+                icon = l.art?.let { b -> artIcon?.takeIf { it.bitmap === b } ?: BitmapDrawable(resources, b).also { artIcon = it } }
                 wave.visibility = VISIBLE; wave.playing = l.playing; wave.color = tint(l.art)
             }
             is Timer -> { icon = l.icon; if (l.base != null) tick(l.base, l.countDown, ORANGE) else { right = l.label; accent = ORANGE } }
-            is Call -> { icon = l.icon; tick(l.since ?: SystemClock.elapsedRealtime(), false, GREEN) }
+            is Call -> {
+                icon = l.icon
+                when {
+                    l.ringing -> { right = "Incoming"; accent = GREEN }
+                    l.since == null -> { right = "Calling"; accent = GREEN }
+                    else -> tick(l.since, false, GREEN)
+                }
+            }
             is Flash -> { icon = l.icon; left = l.title; right = l.text; accent = l.accent; level = l.level }
             is Ongoing -> { icon = l.icon; left = l.title; right = l.text; accent = l.accent; level = l.level }
         }
@@ -397,7 +456,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val lw = (if (icon != null) dp(iconSize + 8) else 0) + leftText.paint.measureText(left).toInt()
         val rw = when {
             wave.visibility == VISIBLE -> dp(20)
-            chrono.visibility == VISIBLE -> chrono.paint.measureText(chrono.text.toString()).toInt() + dp(4)
+            chrono.visibility == VISIBLE -> { chronoLen = chrono.text.length; chrono.paint.measureText(chrono.text.toString()).toInt() + dp(4) }
             else -> rightText.paint.measureText(right).toInt() + (if (level != null) dp(26) else 0)
         }
         return (max(lw, rw) + compact.paddingLeft + dp(4)).coerceIn(pillH / 2, max(pillH / 2, (maxW - gapW) / 2))
@@ -417,20 +476,22 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         glow.setImageBitmap(m.art)
         title.text = m.title
         artist.text = m.artist
-        appBadge.setImageDrawable(m.pkg?.let { appIcon(it) })
+        appBadge.setImageDrawable(m.pkg?.let { app(it).first })
         cardWave.playing = m.playing
         cardWave.color = accent
         play.setImageResource(if (m.playing) R.drawable.ic_pause else R.drawable.ic_play)
         play.contentDescription = if (m.playing) "Pause" else "Play"
-        seek.progressDrawable = track(accent)
+        if (accent != seekAccent) { seekAccent = accent; seek.progressDrawable = track(accent) }
         seek.max = m.duration.coerceIn(1L, Int.MAX_VALUE.toLong()).toInt()
         seek.visibility = if (m.duration > 0) VISIBLE else INVISIBLE // live streams have no duration
         showPosition(m) // a drag reveals the card before the ticker runs
     }
 
     private fun bindCall(c: Call) {
-        callIcon.setImageDrawable(c.icon)
-        callGlow.setImageDrawable(c.icon?.constantState?.newDrawable(resources)) // own copy: a drawable can't sit in two views
+        if (callIcon.drawable !== c.icon) {
+            callIcon.setImageDrawable(c.icon)
+            callGlow.setImageDrawable(c.icon?.constantState?.newDrawable(resources)) // own copy: a drawable can't sit in two views
+        }
         callCaption.text = c.text.ifEmpty { "Incoming call" }
         callName.text = c.name
         // same buttons already on screen: rebuilding would cancel a press in progress
@@ -461,6 +522,15 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             callButtons.addView(b, if (pair) lp(44, 44).apply { marginStart = dp(12) }
                 else LinearLayout.LayoutParams(WRAP, dp(44)).apply { marginStart = dp(8) })
         }
+        // many text buttons would squeeze the name to nothing: cap the row (keeping 96dp for the name) and let them share it
+        val cap = maxW - dp(32 + 48 + 16 + 96)
+        callButtons.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
+        val squeeze = !pair && callButtons.measuredWidth > cap
+        callButtons.layoutParams = LinearLayout.LayoutParams(if (squeeze) cap else WRAP, WRAP)
+        if (squeeze) for (i in 0 until callButtons.childCount) callButtons.getChildAt(i).apply {
+            setPadding(dp(8), 0, dp(8), 0)
+            layoutParams = (layoutParams as LinearLayout.LayoutParams).apply { width = 0; weight = 1f }
+        }
     }
 
     /** The answer glyph rocks like a ringing handset: a short burst every 1.8 s, in step with the ripple. */
@@ -479,7 +549,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private fun bindNotif(f: Flash) {
         notifIcon.setImageDrawable(f.icon)
         notifIcon.visibility = if (f.icon != null) VISIBLE else GONE
-        notifApp.text = f.pkg?.let { appName(it) } ?: ""
+        notifApp.text = f.pkg?.let { app(it).second } ?: ""
         // room left of the camera: half the card minus padding and the camera, minus the 32dp photo and its 10dp gap
         val room = (maxW - dp(32) - gapW) / 2 - dp(42)
         val fits = notifTitle.paint.measureText(f.title) <= room
@@ -488,6 +558,20 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         notifTitleLong.text = f.title
         notifTitleLong.visibility = if (fits) GONE else VISIBLE
         notifText.text = f.text
+        if (f === notifFor) return // the same popup re-rendered: buttons and colour are already in place
+        notifFor = f
+        notifActions.removeAllViews()
+        f.actions.take(3).forEachIndexed { i, a ->
+            notifActions.addView(label(14f, 600).apply {
+                text = a.title
+                gravity = Gravity.CENTER
+                minHeight = dp(44) // design.md's minimum touch target
+                setPadding(dp(12), 0, dp(12), 0)
+                background = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(0x26FFFFFF) }
+                setOnClickListener { host.action(f, a) }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) marginStart = dp(8) })
+        }
+        notifActions.visibility = if (f.actions.isEmpty()) GONE else VISIBLE
         // the app's brand colour (Notification.color), else the icon's, else design.md's on-dark blue
         val tint = dominant(intArrayOf(f.accent)) ?: iconColor(f.icon) ?: BLUE
         if (tint == notifTint) return
@@ -594,17 +678,23 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
 
     // ---- drag: music pill ⇄ card follows the finger 1:1, then hands the finger's velocity to the springs ----
 
-    private class Drag(val fromW: Int, val fromH: Int, val toW: Int, val toH: Int, val from: View, val to: View)
+    /** [fromW]..[toH] are the settled sizes (the drag's scale); [w0]/[h0] where the springs were when it began. */
+    private class Drag(val fromW: Int, val fromH: Int, val toW: Int, val toH: Int, val from: View, val to: View, val w0: Float, val h0: Float)
 
     private var drag: Drag? = null
     private var downX = 0f
     private var downY = 0f
     private var velocity: VelocityTracker? = null
+    private var downEvent: MotionEvent? = null // in the pill's coordinates, for stealFlick()
     private val slop by lazy { ViewConfiguration.get(context).scaledTouchSlop }
+    private val maxFling by lazy { ViewConfiguration.get(context).scaledMaximumFlingVelocity.toFloat() }
 
     private fun track(e: MotionEvent) {
         if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+            held = true
             downX = e.rawX; downY = e.rawY
+            downEvent?.recycle()
+            downEvent = MotionEvent.obtain(e)
             velocity?.recycle()
             velocity = VelocityTracker.obtain()
         }
@@ -612,6 +702,18 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val raw = MotionEvent.obtain(e).apply { setLocation(e.rawX, e.rawY) }
         velocity?.addMovement(raw)
         raw.recycle()
+    }
+
+    /**
+     * An upward move past the slop that began on a message card's button: take the touch from the button and replay
+     * its down to the gesture detector, which never saw it, so the fling that follows dismisses the card.
+     */
+    private fun stealFlick(e: MotionEvent): Boolean {
+        if (content !== notifCard) return false
+        val dy = e.rawY - downY
+        if (dy > -slop || abs(dy) < abs(e.rawX - downX)) return false
+        downEvent?.let { gestures.onTouchEvent(it) }
+        return true
     }
 
     /** Starts a drag once the finger has clearly moved vertically: down on the music pill, or up on the music card. */
@@ -627,17 +729,22 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val cardH = fit(mediaBody, dp(148))
         sizeContent(compact, pillW, pillH)
         sizeContent(mediaCard, maxW, cardH)
-        val d = if (open) Drag(maxW, cardH, pillW, pillH, mediaCard, compact) else Drag(pillW, pillH, maxW, cardH, compact, mediaCard)
-        d.to.animate().cancel()
-        blurs.remove(d.to)?.cancel()
-        d.to.setRenderEffect(null)
+        // from wherever the springs are: a drag that catches the island mid-animation mustn't jump
+        val d = if (open) Drag(maxW, cardH, pillW, pillH, mediaCard, compact, pw.value, ph.value)
+            else Drag(pillW, pillH, maxW, cardH, compact, mediaCard, pw.value, ph.value)
+        for (v in listOf(d.from, d.to)) { // either may be mid-materialize; the finger drives alpha from here
+            v.animate().cancel()
+            blurs.remove(v)?.cancel()
+            v.setRenderEffect(null)
+            v.scaleX = 1f; v.scaleY = 1f
+        }
         d.to.visibility = VISIBLE
-        d.to.alpha = 0f; d.to.scaleX = 1f; d.to.scaleY = 1f
+        d.to.alpha = 0f
         settleChildren(d.to)
-        removeCallbacks(startClock)
+        removeCallbacks(startClock); startAt = 0
         clock.cancel()
         pill.animate().scaleX(1f).scaleY(1f).setDuration(120).start() // undo the touch-down press
-        host.canvas(cardH + dp(48)) // room for the rubber band past the card
+        canvas(max(cardH, ph.value.roundToInt()) + dp(48)) // room for the rubber band past the card
         val cancel = MotionEvent.obtain(e).apply { action = MotionEvent.ACTION_CANCEL }
         gestures.onTouchEvent(cancel) // no long-press once dragging
         cancel.recycle()
@@ -659,8 +766,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     private fun follow(d: Drag, p: Float) {
-        pw.value = d.fromW + (d.toW - d.fromW) * p
-        ph.value = d.fromH + (d.toH - d.fromH) * p
+        pw.value = d.w0 + (d.toW - d.w0) * p
+        ph.value = d.h0 + (d.toH - d.h0) * p
         pw.velocity = 0f; ph.velocity = 0f
         size(pw.value.roundToInt(), ph.value.roundToInt())
         val q = p.coerceIn(0f, 1f)
@@ -672,7 +779,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         drag = null
         val vt = velocity
         vt?.computeCurrentVelocity(1000)
-        val vy = vt?.yVelocity ?: 0f
+        val vy = (vt?.yVelocity ?: 0f).coerceIn(-maxFling, maxFling)
         val range = (d.toH - d.fromH).toFloat()
         // hand the finger's speed to the springs so there's no seam between dragging and animating
         ph.velocity = vy
@@ -707,23 +814,26 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private fun retarget(tw: Int, th: Int, delayStart: Boolean) {
         // most renders (media position updates, bursts of session callbacks) change nothing: no relayout, no clock
         if (!clock.isStarted && pw.value == tw.toFloat() && ph.value == th.toFloat() && pw.target == pw.value && ph.target == ph.value) {
-            removeCallbacks(startClock)
+            removeCallbacks(startClock); startAt = 0
             host.touch(tw, th, touch)
-            host.canvas(th)
+            canvas(th)
             return
         }
         val growing = tw.toLong() * th > (pw.value * ph.value).toLong()
-        if (haptics && growing && tw.toFloat() != pw.target) pill.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+        if (haptics && !quiet && growing && tw.toFloat() != pw.target) pill.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
         bouncy = growing
         pw.target = tw.toFloat()
         ph.target = th.toFloat()
-        // the drawing window never resizes (resizing a centred window shifts old frames sideways); only the
-        // invisible touch window follows the target
-        host.touch(tw, th, touch)
-        host.canvas(max(ph.value.toInt(), th) + dp(16)) // start, end and overshoot; trimmed in settle()
+        // the drawing window never resizes sideways (resizing a centred window shifts old frames); the touch window
+        // changes once per retarget, and shrinking it waits for settle() so a tap on the still-large pill lands
+        if (growing) host.touch(tw, th, touch) else host.touch(max(tw, pw.value.roundToInt()), max(th, ph.value.roundToInt()), touch)
+        canvas(max(canvasH, max(ph.value.roundToInt(), th) + dp(16))) // start, end and overshoot; trimmed in settle()
         removeCallbacks(startClock)
-        if (!ValueAnimator.areAnimatorsEnabled()) { clock.cancel(); pw.snap(); ph.snap(); settle(); return }
-        if (delayStart) postDelayed(startClock, 70) else startClock.run() // let content fade before shrinking into the camera
+        if (!ValueAnimator.areAnimatorsEnabled()) { startAt = 0; clock.cancel(); pw.snap(); ph.snap(); settle(); return }
+        // let content fade before shrinking into the camera; a follow-up render inside the 70 ms keeps the same deadline
+        val now = SystemClock.uptimeMillis()
+        if (delayStart && startAt <= now) startAt = now + 70
+        if (startAt > now) postDelayed(startClock, startAt - now) else startClock.run()
     }
 
     private fun frame(dtMs: Long) {
@@ -745,6 +855,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             clock.end()
             settle()
         } else {
+            // a hard fling can overshoot past the headroom: grow the window (rarely) rather than clip the card
+            if (ph.value > canvasH) canvas(ph.value.roundToInt() + dp(48))
             size(pw.value.roundToInt(), ph.value.roundToInt())
         }
     }
@@ -753,8 +865,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val w = pw.target.roundToInt()
         val h = ph.target.roundToInt()
         size(w, h)
-        host.canvas(h)
+        host.touch(w, h, touch)
+        canvas(h)
     }
+
+    private fun canvas(h: Int) { canvasH = h; host.canvas(h) }
 
     private fun size(w: Int, h: Int) {
         val cw = max(w, 0)
@@ -767,6 +882,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
 
     // ---- helpers ----
 
+    private var artIcon: BitmapDrawable? = null
     private var tintSrc: Bitmap? = null
     private var tintVal = WHITE
 
@@ -807,15 +923,22 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x33000000, 0xAA000000.toInt(), 0xE6000000.toInt()))
     }
 
-    private fun appIcon(pkg: String): Drawable? = try { context.packageManager.getApplicationIcon(pkg) } catch (e: Exception) { null }
+    // shortcut: an app updated while the island runs keeps its old icon/name until the map fills and clears
+    private val apps = HashMap<String, Pair<Drawable?, String?>>()
 
-    private fun appName(pkg: String): String? = try {
-        context.packageManager.run { getApplicationLabel(getApplicationInfo(pkg, 0)).toString() }
-    } catch (e: Exception) { null }
+    /** Icon and label of a package, looked up once: renders come in bursts. */
+    private fun app(pkg: String): Pair<Drawable?, String?> {
+        if (apps.size > 32) apps.clear()
+        return apps.getOrPut(pkg) {
+            val pm = context.packageManager
+            try { pm.getApplicationInfo(pkg, 0).let { pm.getApplicationIcon(it) to pm.getApplicationLabel(it).toString() } }
+            catch (e: Exception) { null to null }
+        }
+    }
 
     private fun clockText(ms: Long): String {
         val s = max(ms, 0L) / 1000
-        return "%d:%02d".format(s / 60, s % 60)
+        return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
@@ -874,7 +997,8 @@ private class Waveform(ctx: Context) : View(ctx) {
         val bar = width / (2f * n - 1)
         paint.strokeWidth = bar
         paint.color = color
-        val t = SystemClock.uptimeMillis() / 1000f
+        val moving = ValueAnimator.areAnimatorsEnabled() // reduced motion: static bars, still taller than paused
+        val t = if (moving) SystemClock.uptimeMillis() / 1000f else 0f
         val room = height - bar
         for (i in 0 until n) {
             val amp = if (playing) 0.25f + 0.75f * abs(sin(t * (4f + i * 1.3f) + i * 1.7f)) else 0.15f
@@ -882,7 +1006,7 @@ private class Waveform(ctx: Context) : View(ctx) {
             val half = room * amp / 2
             c.drawLine(x, height / 2f - half, x, height / 2f + half, paint)
         }
-        if (playing && isShown) postInvalidateOnAnimation()
+        if (moving && playing && isShown) postInvalidateOnAnimation()
     }
 }
 

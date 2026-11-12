@@ -2,13 +2,16 @@ package com.tabisland
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Bundle
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -22,6 +25,7 @@ class MediaListener : NotificationListenerService() {
     private var msm: MediaSessionManager? = null
     private var controller: MediaController? = null
     private val alerted = HashSet<String>()
+    private val popped = HashMap<String, String>() // key -> title and text of its last flash
     private val me by lazy { ComponentName(this, MediaListener::class.java) }
 
     private val callback = object : MediaController.Callback() {
@@ -33,6 +37,7 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Island.listening = true; Island.syncHeadsUp(this) // the island shows notifications instead of the system banner
+        Island.cancel = { cancelNotification(it) }
         val m = getSystemService(MediaSessionManager::class.java)
         msm = m
         m.addOnActiveSessionsChangedListener(sessions, me)
@@ -43,34 +48,46 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         Island.listening = false; Island.syncHeadsUp(this) // island no longer gets notifications, give the system banners back
+        Island.cancel = null
         msm?.removeOnActiveSessionsChangedListener(sessions)
         attach(null)
         alerted.clear()
+        popped.clear()
         probes.clear()
         Island.call = null
         Island.timer = null
         Island.clearOngoing(keep = "torch") // no removal callbacks will arrive for these; torch isn't ours
     }
 
+    override fun onDestroy() {
+        // a crash or unbind can skip onListenerDisconnected; never leave the system banners off
+        Island.listening = false; Island.syncHeadsUp(this)
+        Island.cancel = null
+        super.onDestroy()
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap?) {
         val r = Ranking()
-        // only popups that would make a sound: respects silent channels and Do Not Disturb
+        // only popups that would make a sound: respects silent channels and Do Not Disturb; suspended apps stay quiet
         val loud = rankingMap?.getRanking(sbn.key, r) == true &&
-            r.importance >= NotificationManager.IMPORTANCE_DEFAULT && r.matchesInterruptionFilter()
+            r.importance >= NotificationManager.IMPORTANCE_DEFAULT && r.matchesInterruptionFilter() && !r.isSuspended
         classify(sbn, loud)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         alerted.remove(sbn.key)
+        popped.remove(sbn.key)
         probes.remove(sbn.key)
         val hadSlot = Island.call?.key == sbn.key || Island.timer?.key == sbn.key
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
-        if (Island.flash?.id == sbn.key) Island.flash = null
+        Island.removeFlash(sbn.key)
         Island.removeOngoing(sbn.key)
-        // one call/timer slot: another running call or stopwatch may have been hidden behind the one that ended
-        if (hadSlot) activeNotifications?.forEach { if (it.key != sbn.key && it.isOngoing) classify(it, alert = false) }
+        if (hadSlot) rescan(sbn.key)
     }
+
+    // one call/timer slot: another running call or stopwatch may have been hidden behind the one that ended
+    private fun rescan(gone: String) { activeNotifications?.forEach { if (it.key != gone && it.isOngoing) classify(it, alert = false) } }
 
     /** 0–100 for a determinate progress bar (downloads, uploads, installs), else null. */
     private fun progressOf(n: Notification): Int? {
@@ -92,17 +109,34 @@ class MediaListener : NotificationListenerService() {
         }
         val title = x.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = (x.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: x.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
-        val chrono = if (sbn.isOngoing) chronometer(sbn.key, n) else null
+        val chrono = if (sbn.isOngoing) chronometer(sbn.key, pkg, n) else null
         val nav = sbn.isOngoing && n.category == Notification.CATEGORY_NAVIGATION
         val progress = if (sbn.isOngoing) progressOf(n) else null // a finished, dismissible "100%" isn't live
         if (!nav && progress == null) Island.removeOngoing(sbn.key) // e.g. a finished download
         // an update that no longer qualifies (e.g. stopwatch paused, call ended, timer turned progress) must not leave the old one showing
+        val hadSlot = Island.call?.key == sbn.key || Island.timer?.key == sbn.key
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
+        // alarms, reminders and full-screen alerts are ongoing, so the message path below never pops them
+        val alarm = sbn.isOngoing && n.category != Notification.CATEGORY_CALL && (n.fullScreenIntent != null ||
+            n.category == Notification.CATEGORY_ALARM || n.category == Notification.CATEGORY_REMINDER)
+        // a running timer or stopwatch (Google Clock files them as alarms, text in custom views) is the timer pill, not
+        // a 60 s blank card; a full-screen alert with no text still shows its app
+        if (alert && alarm && (chrono == null || n.fullScreenIntent != null) &&
+            (title.isNotEmpty() || text.isNotEmpty() || n.fullScreenIntent != null) && alerted.add(sbn.key)) {
+            pop(sbn, title.ifEmpty { if (text.isEmpty()) appLabel(pkg) else "" }, text, 60_000)
+        }
         when {
-            n.category == Notification.CATEGORY_CALL && sbn.isOngoing ->
-                Island.call = Call(sbn.key, title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
-                    n.actions?.toList().orEmpty(), chrono?.first, pkg, n.contentIntent ?: n.fullScreenIntent)
+            n.category == Notification.CATEGORY_CALL && sbn.isOngoing -> {
+                val ringing = chrono == null && x.getInt(Notification.EXTRA_CALL_TYPE) != Notification.CallStyle.CALL_TYPE_ONGOING
+                val actions = if (!ringing) null else listOfNotNull(
+                    callAction(x, Notification.EXTRA_DECLINE_INTENT, "Decline") ?: callAction(x, Notification.EXTRA_HANG_UP_INTENT, "Hang up"),
+                    callAction(x, Notification.EXTRA_ANSWER_INTENT, "Answer")).ifEmpty { null }
+                // a dialing or held call must not push an incoming one out of the slot
+                if (ringing || Island.call?.ringing != true) Island.call = Call(sbn.key, title, text,
+                    n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
+                    pkg, n.contentIntent ?: n.fullScreenIntent, ringing)
+            }
             sbn.isOngoing && chrono != null ->
                 Island.timer = Timer(sbn.key, title.ifEmpty { text }, appIcon(pkg), chrono.first, chrono.second, pkg, n.contentIntent)
             // Google Maps: title is the distance to the next turn, large icon the turn arrow
@@ -117,25 +151,56 @@ class MediaListener : NotificationListenerService() {
                     else n.group != null && n.groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY
                 if (alert && !sbn.isOngoing && !muted && (title.isNotEmpty() || text.isNotEmpty())) {
                     val first = alerted.add(sbn.key)
-                    if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0) {
-                        Island.flash = Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
-                            accent = n.color, pkg = pkg, open = n.contentIntent, id = sbn.key, until = System.currentTimeMillis() + 4000)
-                    }
+                    // an unchanged re-post (e.g. a read receipt or re-sort) isn't news; the same words sent again are
+                    if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0 && popped[sbn.key] != signature(n, title, text))
+                        pop(sbn, title, text, if (n.actions.isNullOrEmpty()) 4000 else 6000)
                 }
             }
         }
+        if (hadSlot && Island.call?.key != sbn.key && Island.timer?.key != sbn.key) rescan(sbn.key)
     }
+
+    /**
+     * What makes a re-post a new message, so "ok" sent twice pops twice: MessagingStyle's message count and the last
+     * message's time ("time" in each message bundle), else the notification's own time.
+     */
+    @Suppress("DEPRECATION")
+    private fun signature(n: Notification, title: String, text: String): String {
+        val msgs = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        val stamp = if (msgs.isNullOrEmpty()) "${n.`when`}" else "${msgs.size}/${(msgs.last() as? Bundle)?.getLong("time")}"
+        return "$title\n$text\n$stamp"
+    }
+
+    private fun appLabel(pkg: String): String =
+        try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }
+        catch (e: PackageManager.NameNotFoundException) { "" }
+
+    private fun pop(sbn: StatusBarNotification, title: String, text: String, ms: Long) {
+        val n = sbn.notification
+        popped[sbn.key] = signature(n, title, text)
+        if (!Island.showing) return // the system banner shows it; posting would show it a second time later
+        Island.post(Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(sbn.packageName),
+            accent = n.color, pkg = sbn.packageName, open = n.contentIntent ?: n.fullScreenIntent, id = sbn.key,
+            until = System.currentTimeMillis() + ms, actions = n.actions?.take(3).orEmpty(),
+            autoCancel = n.flags and Notification.FLAG_AUTO_CANCEL != 0))
+    }
+
+    /** A CallStyle button from its PendingIntent extra; the dialer keeps these out of [Notification.actions]. */
+    @Suppress("DEPRECATION")
+    private fun callAction(x: Bundle, extra: String, title: String) =
+        (x.getParcelable(extra) as? PendingIntent)?.let { Notification.Action.Builder(null as Icon?, title, it).build() }
 
     /**
      * (elapsedRealtime base, countDown) from a standard chronometer notification, or from a custom view's
      * Chronometer (Google Clock's timers and stopwatch use custom RemoteViews).
      * shortcut: a paused custom-view timer still looks running; detecting pause needs per-app parsing.
      */
-    private fun chronometer(key: String, n: Notification): Pair<Long, Boolean>? {
+    private fun chronometer(key: String, pkg: String, n: Notification): Pair<Long, Boolean>? {
         val x = n.extras
         if (x.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
             return SystemClock.elapsedRealtime() + (n.`when` - System.currentTimeMillis()) to x.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
         }
+        if (pkg != "com.google.android.deskclock") return null // on the Pixel only Google Clock hides its chronometer in custom views
         @Suppress("DEPRECATION")
         val rv = n.contentView ?: n.bigContentView ?: return null
         // inflating another app's views on the main thread is costly; apps re-posting fast get at most one per second
@@ -178,7 +243,7 @@ class MediaListener : NotificationListenerService() {
         if (c == null || m == null) { Island.media = null; return }
         val s = c.playbackState
         val playing = s?.state == PlaybackState.STATE_PLAYING
-        val prev = Island.media
+        val prev = Island.media?.takeIf { it.pkg == c.packageName } // another app's play time isn't this session's
         val now = System.currentTimeMillis()
         Island.media = Media(
             title = m.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(),

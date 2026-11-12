@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
 import android.app.ActivityOptions
 import android.app.KeyguardManager
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -50,8 +51,11 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private var added = false
     private var shown: Live? = null
     private var expanded = false
+    private var minimised: String? = null // key of the ringing call the user swiped up to the pill
+    private val collapse = Runnable { if (expanded && !island.held) { expanded = false; render() } }
     private var barsVisible = true
     private var battery = -1
+    private var lowArmed = true
     private var dpi = 0
 
     private var cameraX = 0
@@ -81,6 +85,11 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         touchView = View(this).apply {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             setOnTouchListener { _, e ->
+                // a touch anywhere else closes the music card, as tapping outside a sheet would
+                if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+                    if (expanded) { stopPeek(); expanded = false; render() }
+                    return@setOnTouchListener true
+                }
                 val ev = MotionEvent.obtain(e)
                 ev.offsetLocation((touchLp.x - lp.x).toFloat(), (touchLp.y - lp.y).toFloat())
                 island.dispatchTouchEvent(ev)
@@ -188,7 +197,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         touchLp.y = lp.y
         island.haptics = prefs.getBoolean("haptics", true)
         // cards run edge to edge with an 8dp gutter: with their 40dp radius they follow the screen's own rounded corners
-        island.geometry(pillH, gapW, max(pillH, gapW + dp(prefs.getInt("w", 0))), sw - dp(16) - 2 * abs(dx), dx)
+        island.geometry(pillH, gapW, max(pillH, gapW) + dp(prefs.getInt("w", 0).coerceAtLeast(0)), sw - dp(16) - 2 * abs(dx), dx)
         if (added) {
             wm.updateViewLayout(island, lp)
             wm.updateViewLayout(touchView, touchLp)
@@ -196,29 +205,37 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     }
 
     private fun render() {
-        if (!added) return
+        // the finger owns the island: a card must not change or expire under it; released() re-renders
+        if (!added || island.held) return
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        val on = { k: String -> Island.demo || prefs.getBoolean(k, true) }
         // message text over the keyguard would bypass the system's "hide sensitive content" setting
-        val live = Island.top(now) { prefs.getBoolean(it, true) && !(locked && it == "notif") }
+        val live = Island.top(now) { on(it) && !(locked && it == "notif") }
         val prev = shown
         if (live == null || prev == null || live::class != prev::class) expanded = false
-        maybePeek(live, now)
-        shown = live
-        expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
+        if (Island.call?.let { it.ringing && it.key == minimised } != true) minimised = null
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val hidden = landscape || (!barsVisible && prefs.getBoolean("fullscreen", true))
-        // hidden (landscape, fullscreen), locked (messages dropped above) or notifications switched off: the system banner must show instead
-        Island.showing = !hidden && !locked && prefs.getBoolean("notif", true); Island.syncHeadsUp(this)
-        Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$expanded hidden=$hidden")
-        island.show(live, expanded, prefs.getBoolean("idle", true), hidden)
+        maybePeek(live, now, hidden || locked)
+        shown = live
+        expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
+        // hidden (landscape, fullscreen), locked (messages dropped above), notifications off, or a ringing call the
+        // island won't show: the system's own pop-up must show instead
+        // the real switches, not demo mode: a demo must not take real notifications away from the system banner
+        Island.showing = !hidden && !locked && prefs.getBoolean("notif", true) &&
+            !(Island.call?.ringing == true && !prefs.getBoolean("call", true))
+        Island.syncHeadsUp(this)
+        val big = if (live is Call) live.ringing && live.key != minimised else expanded
+        Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$big hidden=$hidden")
+        island.show(live, big, prefs.getBoolean("idle", true) || Island.calibrating, hidden)
     }
 
     // ---- IslandView.Host ----
 
     override fun touch(w: Int, h: Int, on: Boolean) {
-        val flags = BASE_FLAGS or (if (on) 0 else WLP.FLAG_NOT_TOUCHABLE)
+        val flags = BASE_FLAGS or WLP.FLAG_WATCH_OUTSIDE_TOUCH or (if (on) 0 else WLP.FLAG_NOT_TOUCHABLE)
         val ww = max(w, 1)
         val hh = max(h, 1)
         val x = cameraX - ww / 2
@@ -238,21 +255,27 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
 
     private var wasPlaying: Boolean? = null
     private var stoppedAt = 0L
+    private var lastSong: String? = null
     private var peeking = false
+    // held: the finger took over from the announcement, released() ends it
     private val endPeek = Runnable {
-        if (peeking) { peeking = false; expanded = false; render() }
+        if (peeking && !island.held) { peeking = false; expanded = false; render() }
     }
 
-    private fun maybePeek(live: Live?, now: Long) {
+    /** [quiet]: hidden or behind the keyguard, where an announcement would only be noise. */
+    private fun maybePeek(live: Live?, now: Long, quiet: Boolean) {
         val m = Island.media
         val playing = m?.playing == true
         val was = wasPlaying
         wasPlaying = playing
+        val song = if (playing) m?.title else lastSong
+        val newSong = song != lastSong
+        lastSong = song
         if (was == null) return // first look after the service starts: don't announce what was already playing
         if (was && !playing) stoppedAt = now
-        // a start, not a skip or buffering blip (those stop for well under 1.5 s)
-        val started = !was && playing && now - stoppedAt > 1500
-        if (started && live is Media && m?.pkg == SPOTIFY && !expanded && prefs.getBoolean("peek", true)) {
+        // a different song, or music back after a real break; resuming the same song after a pause isn't news
+        val started = !was && playing && (newSong || now - stoppedAt >= 60_000)
+        if (started && !quiet && live is Media && m?.pkg == SPOTIFY && !expanded && prefs.getBoolean("peek", true)) {
             peeking = true
             expanded = true
             handler.removeCallbacks(endPeek)
@@ -277,7 +300,13 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         stopPeek()
         when (val l = shown) {
             is Media -> if (!expanded) { expanded = true; render() } else open(l.open)
-            is Flash -> { open(l.open); Island.flash = null }
+            is Flash -> {
+                if (l.autoCancel) l.id?.let { Island.cancel?.invoke(it) }
+                open(l.open); Island.dismissFlash(l)
+            }
+            // the call screen shows over the keyguard: no PIN prompt while it rings
+            is Call -> if (l.ringing && l.key == minimised) { minimised = null; render() }
+                else if (l.open?.isActivity == true) send(l.open) else open(l.open)
             is Ongoing -> if (l.key == "torch") torchOff() else open(l.open)
             null -> {}
             else -> open(l.open)
@@ -287,16 +316,36 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     override fun longPress() {
         stopPeek()
         val pkg = shown?.pkg ?: return
-        val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
-        startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val launch = packageManager.getLaunchIntentForPackage(pkg)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
+        if (secureLocked()) UnlockActivity.start(this, null, launch) else startActivity(launch)
         if (expanded) { expanded = false; render() }
     }
 
     override fun swipeUp() {
         stopPeek()
+        val l = shown
         when {
             expanded -> { expanded = false; render() }
-            shown is Flash -> Island.flash = null
+            l is Call && l.ringing && l.key != minimised -> { minimised = l.key; render() }
+            l is Flash -> Island.dismissFlash(l)
+        }
+    }
+
+    override fun action(f: Flash, a: Notification.Action) {
+        stopPeek()
+        if (a.remoteInputs.isNullOrEmpty()) send(a.actionIntent)
+        else ReplyActivity.start(this, a, f.title)
+        Island.dismissFlash(f) // an expired card may already have given way to the next one: leave that one up
+    }
+
+    /** End of every touch on the pill: renders were held while the finger was down. */
+    override fun released() {
+        stopPeek()
+        // posted: a button's click is queued behind this UP, and a render now could rebuild the button and cancel it
+        handler.post {
+            render()
+            handler.removeCallbacks(collapse)
+            if (expanded) handler.postDelayed(collapse, 8000)
         }
     }
 
@@ -321,11 +370,17 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     }
 
     private fun open(pi: PendingIntent?) {
-        // locked with a PIN: an activity opens behind the keyguard, but a broadcast/service would act without unlocking
-        if (pi != null && !pi.isActivity && getSystemService(KeyguardManager::class.java).isDeviceLocked) return
-        send(pi)
+        // locked with a PIN: ask for it first; an activity would open unseen behind the keyguard, and a
+        // broadcast/service would act without unlocking at all
+        when {
+            pi == null -> {}
+            secureLocked() -> UnlockActivity.start(this, pi, null)
+            pi.isActivity || !getSystemService(KeyguardManager::class.java).isDeviceLocked -> send(pi)
+        }
         if (expanded) { expanded = false; render() }
     }
+
+    private fun secureLocked() = getSystemService(KeyguardManager::class.java).let { it.isKeyguardLocked && it.isDeviceSecure }
 
     // ---- flashlight live activity: shown while the torch is on; tapping it turns the torch off ----
 
@@ -365,7 +420,12 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
                     val plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
-                    if (battery > 20 && level in 0..20 && !plugged) flash("battery", R.drawable.ic_battery_alert, "Low Battery", "$level%", RED, level)
+                    // re-armed only well clear of 20 %, so a level flapping between 20 and 21 alerts once
+                    if (plugged || level >= 25) lowArmed = true
+                    else if (lowArmed && battery > 20 && level in 0..20) {
+                        lowArmed = false
+                        flash("battery", R.drawable.ic_battery_alert, "Low Battery", "$level%", RED, level)
+                    }
                     battery = level
                 }
                 AudioManager.RINGER_MODE_CHANGED_ACTION -> if (!isInitialStickyBroadcast) {
@@ -376,10 +436,13 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                     }
                 }
                 // closed lock grows out of the camera, springs open at ~0.45 s, then the pill shrinks back (~1.8 s in all)
-                Intent.ACTION_USER_PRESENT -> Island.flash = Flash("unlock", "", "", icon = UnlockDrawable(WHITE),
-                    until = System.currentTimeMillis() + 1800)
-                // a message card still up at screen-off would otherwise reappear over the lock screen on wake
-                Intent.ACTION_SCREEN_OFF -> if (Island.flash?.key == "notif") Island.flash = null
+                Intent.ACTION_USER_PRESENT -> Island.post(Flash("unlock", "", "", icon = UnlockDrawable(WHITE),
+                    until = System.currentTimeMillis() + 1800))
+                // message cards still up or queued at screen-off would otherwise reappear over the lock screen on wake
+                Intent.ACTION_SCREEN_OFF -> {
+                    Island.clearFlashes("notif")
+                    expanded = false; stopPeek(); render()
+                }
                 // nothing else re-renders on lock: hand pop-ups back to the system while the keyguard is up
                 Intent.ACTION_SCREEN_ON -> render()
             }
@@ -387,8 +450,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     }
 
     private fun flash(key: String, icon: Int, title: String, text: String, accent: Int, level: Int? = null, ms: Long = 3000) {
-        Island.flash = Flash(key, title, text, icon = tinted(icon, accent), accent = accent, level = level,
-            until = System.currentTimeMillis() + ms)
+        Island.post(Flash(key, title, text, icon = tinted(icon, accent), accent = accent, level = level,
+            until = System.currentTimeMillis() + ms))
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).roundToInt()
