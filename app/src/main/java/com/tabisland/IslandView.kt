@@ -46,8 +46,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val GRAY = 0xFF8E8E93.toInt()
-private const val LIGHT = 0xFFE5E5EA.toInt()
+// secondary copy: translucent white, so on a tinted card it takes the card's hue instead of sitting on it as grey
+private const val MUTED = 0xB3FFFFFF.toInt()
 private const val TRACK = 0x33FFFFFF
 private const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
 private const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
@@ -95,22 +95,22 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }.apply { background = bg; clipToOutline = true }
 
     // ---- compact: [icon text] [camera gap] [text ring | waveform | chronometer] ----
-    private val leftIcon = roundImage(dp(7))
-    private val leftText = label(13f, 500)
-    private val rightText = label(13f, 600).apply { fontFeatureSettings = "tnum" }
+    private val leftIcon = roundImage(dp(8))
+    private val leftText = label(14f, 400)
+    private val rightText = label(14f, 600).apply { fontFeatureSettings = "tnum" }
     private val ring = Ring(ctx)
     private val wave = Waveform(ctx)
     private val chrono = Chronometer(ctx).apply { textSize = 14f; typeface = font(600); fontFeatureSettings = "tnum" }
     private val gap = Space(ctx)
     private val compactLeft = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
-        addView(leftIcon, lp(22, 22).apply { marginEnd = dp(7) })
+        addView(leftIcon, lp(22, 22).apply { marginEnd = dp(8) })
         addView(leftText)
     }
     private val compactRight = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
         addView(rightText)
-        addView(ring, lp(18, 18).apply { marginStart = dp(6) })
+        addView(ring, lp(18, 18).apply { marginStart = dp(8) })
         addView(wave, lp(20, 14))
         addView(chrono)
     }
@@ -121,47 +121,54 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(compactRight, LinearLayout.LayoutParams(0, MATCH, 1f))
     }
 
-    // ---- expanded media card: blurred-art glow, art, caption, title, progress, controls ----
+    // ---- expanded media card: [art title/artist waveform], [time ━━━ time], [app ⏮ ⏯ ⏭] ----
     private var media: Media? = null
     private var seeking = false
     private val glow = glowView()
     private val scrim = scrimView()
-    private val art = roundImage(dp(14))
-    private val caption = label(11f, 700).apply { letterSpacing = 0.08f; isAllCaps = true }
-    private val title = label(17f, 600).apply { letterSpacing = -0.01f }
-    private val artist = label(14f, 400).apply { setTextColor(GRAY) }
-    private val appBadge = roundImage(dp(6))
+    private val art = roundImage(dp(12))
+    private val title = label(17f, 600)
+    private val artist = label(15f, 400).apply { setTextColor(MUTED) }
+    private val appBadge = roundImage(dp(12)) // circle, like Pixel's launcher icons
+    private val cardWave = Waveform(ctx) // same corner as the pill's waveform, so the drag between them stays put
     private val seek = SeekBar(ctx).apply {
         thumb = null
         splitTrack = false
         setPadding(0, 0, 0, 0)
         contentDescription = "Seek"
     }
-    private val elapsed = label(11f, 500).apply { setTextColor(GRAY); fontFeatureSettings = "tnum" }
-    private val remaining = label(11f, 500).apply { setTextColor(GRAY); fontFeatureSettings = "tnum" }
-    private val play = iconButton(R.drawable.ic_play, "Play", 14) {
+    private val elapsed = label(12f, 400).apply { setTextColor(MUTED); fontFeatureSettings = "tnum" }
+    private val remaining = label(12f, 400).apply { setTextColor(MUTED); fontFeatureSettings = "tnum" }
+    private val play = iconButton(R.drawable.ic_play, "Play", 9) {
         val playing = media?.playing == true
         host.media { if (playing) it.pause() else it.play() }
     }
     private val mediaBody = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(LinearLayout(ctx).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(art, lp(56, 56))
-                addView(column(caption, title, artist), LinearLayout.LayoutParams(0, WRAP, 1f))
-                addView(appBadge, lp(22, 22).apply { gravity = Gravity.TOP })
-            })
-            addView(seek, LinearLayout.LayoutParams(MATCH, dp(22)).apply { topMargin = dp(12) })
-            addView(LinearLayout(ctx).apply {
-                addView(elapsed, LinearLayout.LayoutParams(0, WRAP, 1f))
-                addView(remaining)
-            })
-            addView(LinearLayout(ctx).apply {
-                gravity = Gravity.CENTER
-                addView(iconButton(R.drawable.ic_prev, "Previous", 14) { host.media { it.skipToPrevious() } }, lp(64, 52))
-                addView(play, lp(76, 56))
-                addView(iconButton(R.drawable.ic_next, "Next", 14) { host.media { it.skipToNext() } }, lp(64, 52))
-            }, LinearLayout.LayoutParams(MATCH, WRAP))
+        orientation = LinearLayout.VERTICAL
+        addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(art, lp(52, 52))
+            addView(column(title, artist), LinearLayout.LayoutParams(0, WRAP, 1f))
+            // level with the title, top right, where the pill's waveform was
+            addView(cardWave, lp(20, 14).apply { gravity = Gravity.TOP; topMargin = dp(10) })
+        })
+        addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(elapsed)
+            addView(seek, LinearLayout.LayoutParams(0, dp(22), 1f).apply { marginStart = dp(10); marginEnd = dp(10) })
+            addView(remaining)
+        }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(10) })
+        // the app sits where the reference has its star; an equal space on the right keeps the controls centred
+        addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(appBadge, lp(24, 24))
+            addView(Space(ctx), LinearLayout.LayoutParams(0, 0, 1f))
+            addView(iconButton(R.drawable.ic_prev, "Previous", 10) { host.media { it.skipToPrevious() } }, lp(64, 48))
+            addView(play, lp(64, 48))
+            addView(iconButton(R.drawable.ic_next, "Next", 10) { host.media { it.skipToNext() } }, lp(64, 48))
+            addView(Space(ctx), LinearLayout.LayoutParams(0, 0, 1f))
+            addView(Space(ctx), lp(24, 24))
+        }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) })
     }
     private val mediaCard = FrameLayout(ctx).apply {
         addView(glow, LayoutParams(MATCH, MATCH))
@@ -170,22 +177,21 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     // ---- incoming call card ----
-    private val callIcon = roundImage(dp(26))
-    private val callCaption = label(13f, 400).apply { setTextColor(GRAY) } // iOS: a quiet line above the name
-    private val callName = label(20f, 600).apply { letterSpacing = -0.01f }
+    private val callIcon = roundImage(dp(24))
+    private val callCaption = label(14f, 400).apply { setTextColor(MUTED) } // iOS: a quiet line above the name
+    private val callName = label(21f, 600)
     private val callButtons = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private var callSig: List<Pair<String, PendingIntent?>>? = null
     private val callGlow = glowView() // the caller's photo, blurred, like album art behind the music card
     private val callRow = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
         clipToPadding = false // the ripple spills into the padding
-        setPadding(dp(20), 0, dp(16), 0)
         // rings ripple out of the photo while it rings; negative margins keep the photo where it was
         addView(FrameLayout(ctx).apply {
-            addView(Ripple(ctx).apply { inner = dp(26).toFloat() }, LayoutParams(MATCH, MATCH))
-            addView(callIcon, LayoutParams(dp(52), dp(52), Gravity.CENTER))
+            addView(Ripple(ctx).apply { inner = dp(24).toFloat() }, LayoutParams(MATCH, MATCH))
+            addView(callIcon, LayoutParams(dp(48), dp(48), Gravity.CENTER))
         // negative margins on all sides: the rings overflow without making the row (and fit()) taller
-        }, lp(76, 76).apply { marginStart = -dp(12); marginEnd = -dp(12); topMargin = -dp(10); bottomMargin = -dp(10) })
+        }, lp(72, 72).apply { marginStart = -dp(12); marginEnd = -dp(12); topMargin = -dp(10); bottomMargin = -dp(10) })
         addView(column(callCaption, callName), LinearLayout.LayoutParams(0, WRAP, 1f))
         addView(callButtons)
     }
@@ -195,24 +201,33 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(callRow, LayoutParams(MATCH, MATCH))
     }
 
-    // ---- notification card ----
-    private val notifIcon = roundImage(dp(14))
-    private val notifApp = label(12f, 500).apply { setTextColor(GRAY) }
-    private val notifTitle = label(15f, 600)
-    private val notifText = label(14f, 400).apply { maxLines = 2; setTextColor(LIGHT) }
-    private val notifCard = LinearLayout(ctx).apply {
+    // ---- notification card: [photo sender | camera | app] level with the camera, the message across the width below ----
+    private val notifIcon = roundImage(dp(16)) // circle: contact photos and Pixel's round app icons
+    private val notifApp = label(13f, 400).apply { setTextColor(MUTED) }
+    private val notifTitle = label(17f, 600)
+    private val notifText = label(16f, 400).apply { maxLines = 3 }
+    // a name too long for the space left of the camera gets its own full-width line instead of being cut
+    private val notifTitleLong = label(17f, 600).apply { maxLines = 2; visibility = GONE }
+    private var notifTint = 0
+    private val notifGap = Space(ctx) // the camera's width, set in geometry()
+    private val notifBand = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
+        addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(notifIcon, lp(32, 32))
+            addView(notifTitle, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        addView(notifGap, LinearLayout.LayoutParams(gapW, 0))
+        addView(LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.END; addView(notifApp) },
+            LinearLayout.LayoutParams(0, WRAP, 1f))
+    }
+    private val notifCard = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
         // hidden from screen sharing while showing, like the system's own notifications
         if (Build.VERSION.SDK_INT >= 35) contentSensitivity = View.CONTENT_SENSITIVITY_SENSITIVE
-        setPadding(dp(18), dp(12), dp(20), dp(12))
-        addView(notifIcon, lp(46, 46))
-        addView(column(
-            LinearLayout(ctx).apply {
-                addView(notifApp, LinearLayout.LayoutParams(0, WRAP, 1f))
-                addView(label(12f, 400).apply { setTextColor(GRAY); text = "now" })
-            },
-            notifTitle, notifText,
-        ), LinearLayout.LayoutParams(0, WRAP, 1f))
+        addView(notifBand)
+        addView(notifTitleLong, LinearLayout.LayoutParams(MATCH, WRAP))
+        addView(notifText, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(4) })
     }
 
     // ---- motion state ----
@@ -288,11 +303,18 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         gap.layoutParams = gap.layoutParams.apply { width = gapW }
         val inset = max((pillH - dp(22)) / 2, dp(6)) // keeps the icon concentric with the pill's round end
         compact.setPadding(inset, 0, inset, 0)
-        // cards start their content below the band that holds the camera hole, like the iPhone's expanded island
-        val top = max(dp(20), pillH)
-        mediaBody.setPadding(dp(20), top, dp(20), dp(8))
-        callRow.setPadding(dp(20), top, dp(16), dp(12))
-        notifCard.setPadding(dp(18), top, dp(20), dp(14))
+        // concentric with the pill's round end: its radius minus the inset
+        (leftIcon.background as GradientDrawable).cornerRadius = max(pillH / 2f - inset, dp(6).toFloat())
+        // the art row rides up beside the camera: the art is clear of it, and the title (centred on the art) starts
+        // just below the hole; pillH has 5dp of air under the hole
+        mediaBody.setPadding(dp(16), max(dp(16), pillH - dp(10)), dp(16), dp(10))
+        // the call row is too wide to split around the camera (the name would run under it), so it starts below,
+        // taking 4 of those 5dp
+        callRow.setPadding(dp(16), max(dp(20), pillH - dp(4)), dp(16), dp(14))
+        // the sender sits level with the camera, left of it; a large font size may make the row taller
+        notifBand.minimumHeight = pillH
+        notifGap.layoutParams = notifGap.layoutParams.apply { width = gapW }
+        notifCard.setPadding(dp(16), 0, dp(16), dp(16))
     }
 
     fun show(live: Live?, expanded: Boolean, idleOn: Boolean, hidden: Boolean) {
@@ -319,15 +341,15 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         pill.contentDescription = describe(live)
         touch = live != null
         retarget(tw, th, delayStart = fadingOut)
-        wave.invalidate()
+        wave.invalidate(); cardWave.invalidate()
         if (v === mediaCard) { removeCallbacks(ticker); post(ticker) }
     }
 
     private fun bind(l: Live?, expanded: Boolean, idleOn: Boolean): Triple<View?, Int, Int> = when {
         l == null -> if (idleOn) Triple(null, idleW, pillH) else Triple(null, 0, 0)
-        l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, fit(mediaBody, dp(178))) }
-        l is Call && l.since == null -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(68))) }
-        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(92))) }
+        l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, fit(mediaBody, dp(148))) }
+        l is Call && l.since == null -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(52))) }
+        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(100))) }
         else -> Triple(compact, gapW + 2 * bindCompact(l), pillH)
     }
 
@@ -359,7 +381,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val ringWasShown = ring.visibility == VISIBLE
         // the unlock padlock is the whole show, so it gets a bigger slot and a tick as it opens
         val iconSize = if (icon is UnlockDrawable) 28 else 22
-        if (leftIcon.layoutParams.width != dp(iconSize)) leftIcon.layoutParams = lp(iconSize, iconSize).apply { marginEnd = dp(7) }
+        if (leftIcon.layoutParams.width != dp(iconSize)) leftIcon.layoutParams = lp(iconSize, iconSize).apply { marginEnd = dp(8) }
         if (icon is UnlockDrawable) icon.onOpen = { if (haptics) pill.performHapticFeedback(HapticFeedbackConstants.CONFIRM) }
         leftIcon.setImageDrawable(icon)
         leftIcon.visibility = if (icon != null) VISIBLE else GONE
@@ -372,11 +394,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         rightText.visibility = if (right.isEmpty()) GONE else VISIBLE
         ring.visibility = if (level != null) VISIBLE else GONE
         if (level != null) ring.set(level, accent, fromEmpty = !ringWasShown)
-        val lw = (if (icon != null) dp(iconSize + 7) else 0) + leftText.paint.measureText(left).toInt()
+        val lw = (if (icon != null) dp(iconSize + 8) else 0) + leftText.paint.measureText(left).toInt()
         val rw = when {
             wave.visibility == VISIBLE -> dp(20)
             chrono.visibility == VISIBLE -> chrono.paint.measureText(chrono.text.toString()).toInt() + dp(4)
-            else -> rightText.paint.measureText(right).toInt() + (if (level != null) dp(24) else 0)
+            else -> rightText.paint.measureText(right).toInt() + (if (level != null) dp(26) else 0)
         }
         return (max(lw, rw) + compact.paddingLeft + dp(4)).coerceIn(pillH / 2, max(pillH / 2, (maxW - gapW) / 2))
     }
@@ -393,11 +415,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val accent = tint(m.art)
         art.setImageBitmap(m.art)
         glow.setImageBitmap(m.art)
-        caption.text = "Now playing"
-        caption.setTextColor(accent)
         title.text = m.title
         artist.text = m.artist
         appBadge.setImageDrawable(m.pkg?.let { appIcon(it) })
+        cardWave.playing = m.playing
+        cardWave.color = accent
         play.setImageResource(if (m.playing) R.drawable.ic_pause else R.drawable.ic_play)
         play.contentDescription = if (m.playing) "Pause" else "Play"
         seek.progressDrawable = track(accent)
@@ -427,16 +449,17 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
                     if (answer) rock(this)
                 }
             } else {
-                label(13f, 600).apply {
+                label(14f, 600).apply {
                     text = a.title
                     gravity = Gravity.CENTER
                     setPadding(dp(16), 0, dp(16), 0)
-                    background = GradientDrawable().apply { cornerRadius = dp(19).toFloat(); setColor(color) }
+                    background = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(color) }
                     setOnClickListener { host.send(a.actionIntent) }
                 }
             }
-            callButtons.addView(b, if (pair) lp(50, 50).apply { marginStart = dp(12) }
-                else LinearLayout.LayoutParams(WRAP, dp(38)).apply { marginStart = dp(8) })
+            // 44dp: design.md's minimum touch target
+            callButtons.addView(b, if (pair) lp(44, 44).apply { marginStart = dp(12) }
+                else LinearLayout.LayoutParams(WRAP, dp(44)).apply { marginStart = dp(8) })
         }
     }
 
@@ -457,8 +480,36 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         notifIcon.setImageDrawable(f.icon)
         notifIcon.visibility = if (f.icon != null) VISIBLE else GONE
         notifApp.text = f.pkg?.let { appName(it) } ?: ""
+        // room left of the camera: half the card minus padding and the camera, minus the 32dp photo and its 10dp gap
+        val room = (maxW - dp(32) - gapW) / 2 - dp(42)
+        val fits = notifTitle.paint.measureText(f.title) <= room
         notifTitle.text = f.title
+        notifTitle.visibility = if (fits) VISIBLE else GONE
+        notifTitleLong.text = f.title
+        notifTitleLong.visibility = if (fits) GONE else VISIBLE
         notifText.text = f.text
+        // the app's brand colour (Notification.color), else the icon's, else design.md's on-dark blue
+        val tint = dominant(intArrayOf(f.accent)) ?: iconColor(f.icon) ?: BLUE
+        if (tint == notifTint) return
+        notifTint = tint
+        val hsv = FloatArray(3).also { Color.colorToHSV(tint, it) }
+        hsv[1] = hsv[1].coerceIn(0.45f, 0.85f)
+        fun shade(v: Float) = Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], v))
+        // black under the camera band, deepening into the app's colour (the reference's weather card); the bottom
+        // stays dark enough (value ≤ 0.48) for white text on yellow or green brands
+        notifCard.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.BLACK, shade(0.22f), shade(0.48f)))
+    }
+
+    /** [dominant] colour of a drawable, drawn small on its own copy (bounds belong to the view showing it). */
+    private fun iconColor(d: Drawable?): Int? {
+        val copy = d?.constantState?.newDrawable(resources) ?: return null
+        val b = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+        copy.setBounds(0, 0, 16, 16)
+        copy.draw(Canvas(b))
+        val px = IntArray(256).also { b.getPixels(it, 0, 16, 0, 0, 16, 16) }
+        b.recycle()
+        return dominant(px)
     }
 
     private fun describe(l: Live?): String? = when (l) {
@@ -573,7 +624,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         if (open == (dy > 0)) return false
         bindMedia(m)
         val pillW = gapW + 2 * bindCompact(m)
-        val cardH = fit(mediaBody, dp(178))
+        val cardH = fit(mediaBody, dp(148))
         sizeContent(compact, pillW, pillH)
         sizeContent(mediaCard, maxW, cardH)
         val d = if (open) Drag(maxW, cardH, pillW, pillH, mediaCard, compact) else Drag(pillW, pillH, maxW, cardH, compact, mediaCard)
@@ -709,7 +760,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val cw = max(w, 0)
         val ch = max(h, 0)
         pill.layoutParams = (pill.layoutParams as LayoutParams).apply { width = cw; height = ch }
-        bg.cornerRadius = min(ch / 2f, dp(42).toFloat())
+        // a true pill when compact, and the radius keeps growing with the height up to 40dp: cards stay soft, never boxy
+        bg.cornerRadius = min(ch / 2f, max(dp(40), pillH / 2).toFloat())
         pill.invalidateOutline()
     }
 
@@ -772,6 +824,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private fun label(size: Float, weight: Int) = TextView(context).apply {
         textSize = size
         typeface = font(weight)
+        // design.md tracking is size-specific: airy tagline, tight 14–17sp, neutral fine print
+        letterSpacing = when { size >= 20f -> 0.011f; size >= 17f -> -0.022f; size >= 14f -> -0.016f; else -> 0f }
         setTextColor(WHITE)
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
@@ -779,7 +833,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
 
     private fun column(vararg views: View) = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(14), 0, dp(8), 0)
+        setPadding(dp(12), 0, dp(4), 0)
         views.forEach { addView(it) }
     }
 
@@ -798,7 +852,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         isClickable = true
         setOnTouchListener { b, e ->
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> b.animate().scaleX(0.85f).scaleY(0.85f).alpha(0.7f).setDuration(80).start()
+                MotionEvent.ACTION_DOWN -> b.animate().scaleX(0.9f).scaleY(0.9f).alpha(0.7f).setDuration(80).start()
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> b.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).setInterpolator(EASE_OUT).start()
             }
             false

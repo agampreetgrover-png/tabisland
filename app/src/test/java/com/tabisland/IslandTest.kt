@@ -16,6 +16,14 @@ class IslandTest {
     private fun media(playing: Boolean, lastPlayed: Long = now) =
         Media("Song", "Artist", null, playing, lastPlayed, 0, 0, 0, 1f, "spotify", null)
 
+    @Test fun dominantIgnoresWhiteAndGrey() {
+        val red = 0xFFFF0000.toInt()
+        // a red glyph on a white tile with a transparent margin: the red wins
+        assertEquals(red, dominant(intArrayOf(red, WHITE, WHITE, 0x00000000, 0xFF808080.toInt())))
+        assertNull(dominant(intArrayOf(WHITE, 0xFF808080.toInt(), 0xFF000000.toInt(), 0)))
+        assertNull(dominant(intArrayOf(0))) // Notification.COLOR_DEFAULT
+    }
+
     @Test fun callBeatsEverything() = assertSame(call, pick(call, flash(), timer, listOf(nav), media(true), now, all))
 
     @Test fun flashBeatsAnsweredCall() {

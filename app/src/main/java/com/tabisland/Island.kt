@@ -14,7 +14,7 @@ const val WHITE = 0xFFFFFFFF.toInt()
 const val GREEN = 0xFF30D158.toInt()
 const val ORANGE = 0xFFFF9F0A.toInt()
 const val RED = 0xFFFF453A.toInt()
-const val BLUE = 0xFF0A84FF.toInt()
+const val BLUE = 0xFF2997FF.toInt() // design.md primary-on-dark: the one accent on dark surfaces
 const val YELLOW = 0xFFFFD60A.toInt()
 const val PAUSED_KEEP_MS = 5 * 60_000L
 
@@ -143,6 +143,21 @@ fun pick(call: Call?, flash: Flash?, timer: Timer?, ongoing: Collection<Ongoing>
         ?: top?.takeIf { it.rank >= 2 }
         ?: media?.takeIf { on("media") && (it.playing || now - it.lastPlayed < PAUSED_KEEP_MS) }
         ?: top
+}
+
+/**
+ * Colourful average of ARGB pixels (e.g. an app icon): each pixel weighs alpha × chroma, so white, grey, black and
+ * transparent pixels don't wash the colour out. Null when nothing in it is colourful.
+ */
+fun dominant(px: IntArray): Int? {
+    var r = 0f; var g = 0f; var b = 0f; var total = 0f
+    for (p in px) {
+        val pr = p shr 16 and 0xFF; val pg = p shr 8 and 0xFF; val pb = p and 0xFF
+        val w = (p ushr 24) / 255f * (maxOf(pr, pg, pb) - minOf(pr, pg, pb)) / 255f
+        r += pr * w; g += pg * w; b += pb * w; total += w
+    }
+    if (total < px.size * 0.05f) return null
+    return (0xFF shl 24) or ((r / total).toInt() shl 16) or ((g / total).toInt() shl 8) or (b / total).toInt()
 }
 
 /** When [live] stops qualifying on its own, so the service knows when to re-check. */

@@ -119,7 +119,7 @@ class MediaListener : NotificationListenerService() {
                     val first = alerted.add(sbn.key)
                     if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0) {
                         Island.flash = Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
-                            pkg = pkg, open = n.contentIntent, id = sbn.key, until = System.currentTimeMillis() + 4000)
+                            accent = n.color, pkg = pkg, open = n.contentIntent, id = sbn.key, until = System.currentTimeMillis() + 4000)
                     }
                 }
             }

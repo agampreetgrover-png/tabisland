@@ -187,7 +187,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         lp.width = sw
         touchLp.y = lp.y
         island.haptics = prefs.getBoolean("haptics", true)
-        island.geometry(pillH, gapW, max(pillH, gapW + dp(prefs.getInt("w", 0))), sw - dp(24) - 2 * abs(dx), dx)
+        // cards run edge to edge with an 8dp gutter: with their 40dp radius they follow the screen's own rounded corners
+        island.geometry(pillH, gapW, max(pillH, gapW + dp(prefs.getInt("w", 0))), sw - dp(16) - 2 * abs(dx), dx)
         if (added) {
             wm.updateViewLayout(island, lp)
             wm.updateViewLayout(touchView, touchLp)
