@@ -13,11 +13,9 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewGroup
-import android.view.animation.DecelerateInterpolator
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
-import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
@@ -40,7 +38,6 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.animation.OvershootInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -95,6 +92,7 @@ private const val PUMICE = 0xFF9E9EA6.toInt()
 private const val BONE = 0xFFF4F4F1.toInt()
 private const val TRACK = 0xFF6E6E76.toInt() // off-state switch track: 3.2:1 on BASALT, unlike the hairline SEAM
 private const val GRANT = "adb shell pm grant com.tabisland android.permission.WRITE_SECURE_SETTINGS"
+private const val UNDO = "adb shell settings put global heads_up_notifications_enabled 1"
 
 private const val HOLE_Y = 44 // dp from the stage's top to the camera's centre: room for the pill at y −20
 
@@ -104,7 +102,8 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences(Prefs.FILE, MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
 
-    private class Step(val dot: ImageView, val action: TextView, val todo: String, var done: Boolean? = null)
+    private class Step(val dot: ImageView, val action: TextView, val todo: String, val sub: TextView, val todoSub: String,
+                       val doneSub: String, var done: Boolean? = null)
     private val steps = mutableListOf<Step>()
     private lateinit var col: LinearLayout
     private lateinit var status: TextView
@@ -112,6 +111,8 @@ class MainActivity : Activity() {
     private lateinit var setup: LinearLayout
     private var setupAt = 0 // setup's place in col while it isn't finished; once it is, it moves to the end
     private lateinit var restrictedHint: View
+    private lateinit var undoNote: View
+    private lateinit var reset: View
     private lateinit var demoHint: TextView
     private lateinit var testAction: TextView
     private val seekBars = HashMap<String, SeekBar>()
@@ -176,13 +177,15 @@ class MainActivity : Activity() {
         // demos: one tab per kind of island, its styles as chips that play on the stage (and the real island)
         val chips = Flow(this, dp(8))
         val tabs = Demo.groups.mapIndexed { i, (name, _) -> segment(name) { showTab(i, chips) } }
+        // one basalt track with the selected tab inside it: reads as navigation, not as another row of chips
         col.addView(LinearLayout(this).apply {
-            tabs.forEachIndexed { i, t ->
-                addView(t, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (i > 0) marginStart = dp(6) })
-            }
+            background = GradientDrawable().apply { setColor(BASALT); cornerRadius = dp(28).toFloat() }
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            // each tab gets its label's width plus an equal share of what's left, so a long label never crowds its neighbour
+            for (t in tabs) addView(t, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(24) })
         col.addView(chips, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
-        showTab(tab, chips, animate = false)
+        showTab(tab, chips)
         demoHint = text("Playing in the preview only. Turn on step 1 to see it on the real island.", 13f, PUMICE).apply {
             setPadding(dp(16), dp(10), dp(16), 0); visibility = View.GONE
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -205,17 +208,24 @@ class MainActivity : Activity() {
                     .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(this, MediaListener::class.java).flattenToString()),
                     Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             },
-            step(3, "Replace system pop-ups", "Optional. Run one adb command from a computer", "Copy") {
+            step(3, "Replace system pop-ups", "Optional. Run one adb command from a computer", "Copy",
+                doneSub = "The island shows pop-ups instead of the system") {
                 if (steps[2].done != true) {
-                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("adb command", GRANT))
+                    copy(GRANT)
                     steps[2].action.text = "Copied"
                 }
             },
         ))
-        setup.addView(text(
-            "Before uninstalling, turn the island off first, or system pop-ups stay off. To undo: adb shell settings put global heads_up_notifications_enabled 1",
-            13f, PUMICE,
-        ).apply { setPadding(dp(16), dp(10), dp(16), 0) })
+        // only once pop-ups are replaced is there anything to undo
+        val undo = actionRow(UNDO, "Copy") { copy(UNDO) }
+        (undo.getChildAt(0) as TextView).apply { typeface = Typeface.MONOSPACE; textSize = 13f } // a command, set as code
+        undoNote = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text("Before uninstalling, turn the island off first, or system pop-ups stay off. To bring them back, run:",
+                13f, PUMICE).apply { setPadding(dp(16), dp(10), dp(16), dp(10)) })
+            addView(group(undo))
+        }
+        setup.addView(undoNote)
         restrictedHint = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(text(
@@ -252,9 +262,10 @@ class MainActivity : Activity() {
         col.addView(text("Exact values for the preview at the top. The island moves as you drag.", 13f, PUMICE).apply { setPadding(dp(16), 0, dp(16), dp(10)) })
         val sliders = Prefs.sliders.map { s -> sliderRow(s, prefs.getInt(s.key, 0)) { prefs.edit().putInt(s.key, it).apply() } }
         // Reset needs no slider code: the prefs listener moves them back
-        col.addView(group(*sliders.toTypedArray(), actionRow("Position and size", "Reset") {
+        reset = actionRow("Position and size", "Reset") {
             prefs.edit().apply { Prefs.sliders.forEach { putInt(it.key, 0) } }.apply()
-        }))
+        }
+        col.addView(group(*sliders.toTypedArray(), reset))
         prefs.registerOnSharedPreferenceChangeListener(prefsChanged)
 
         setContentView(ScrollView(this).apply {
@@ -263,6 +274,8 @@ class MainActivity : Activity() {
             isVerticalScrollBarEnabled = false
             addView(col)
             clipToPadding = true // content stops at the status bar instead of scrolling under the clock and the island
+            isVerticalFadingEdgeEnabled = true // and fades out there, instead of a hard cut through a line of text
+            setFadingEdgeLength(dp(24))
             setOnApplyWindowInsetsListener { v, insets ->
                 val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
                 v.setPadding(0, bars.top, 0, 0)
@@ -310,6 +323,7 @@ class MainActivity : Activity() {
         }
         statusDot.setColor(when { !a11y -> RED; running && notif -> GREEN; else -> ORANGE })
         restrictedHint.visibility = if (a11y && notif) View.GONE else View.VISIBLE
+        undoNote.visibility = if (secure) View.VISIBLE else View.GONE
         if (running) demoHint.visibility = View.GONE
         // finished setup is rarely needed again: it moves to the end, out of the way of the demos and switches
         val done = running && notif
@@ -423,6 +437,7 @@ class MainActivity : Activity() {
         // the centre line lights up when the island is centred on the camera
         guide.setBackgroundColor(if (prefs.getInt("x", 0) == 0) BONE else TRACK)
         readout.text = Prefs.sliders.joinToString("   ") { "${it.key} ${signed(prefs.getInt(it.key, 0))}" }
+        enable(reset, Prefs.sliders.any { prefs.getInt(it.key, 0) != 0 }) // nothing to reset at the defaults
         renderPreview()
     }
 
@@ -431,8 +446,13 @@ class MainActivity : Activity() {
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
         val live = Island.top(now) { Island.demo || prefs.getBoolean(it, true) }
-        preview.show(live, live is Call && live.ringing, prefs.getBoolean("idle", true) || Island.calibrating, false)
+        // with "Show the pill when idle" off the real island is empty at rest; the stage still shows where it would sit,
+        // dimmed, so there is something to drag
+        val ghost = live == null && !prefs.getBoolean("idle", true) && !Island.calibrating
+        preview.show(live, live is Call && live.ringing, true, false)
+        preview.alpha = if (ghost) 0.4f else 1f
         stageHint.animate().alpha(if (live == null && !Island.calibrating) 1f else 0f).setDuration(150).start()
+        if (!Island.demo) { playing?.isSelected = false; playing = null; playingStyle = null } // the demo ended: no chip is playing
         expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
     }
 
@@ -440,31 +460,39 @@ class MainActivity : Activity() {
 
     private val tabViews = mutableListOf<TextView>()
 
-    private fun showTab(i: Int, chips: Flow, animate: Boolean = true) {
+    /** The style whose demo is on the island now, and its chip while that tab is showing; outlined until the demo ends. */
+    private var playingStyle: String? = null
+    private var playing: View? = null
+
+    // only the island moves: the chips swap in place
+    private fun showTab(i: Int, chips: Flow) {
         tab = i
         tabViews.forEachIndexed { j, t -> t.isSelected = j == i }
         chips.removeAllViews()
-        for ((style, label) in Demo.groups[i].second) chips.addView(pillButton(label) { play(style) },
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
-        if (animate && ValueAnimator.areAnimatorsEnabled()) {
-            chips.alpha = 0f; chips.translationY = dp(6).toFloat()
-            chips.animate().alpha(1f).translationY(0f).setDuration(180).setInterpolator(DecelerateInterpolator(2f)).start()
-        }
+        playing = null
+        for ((style, label) in Demo.groups[i].second) chips.addView(pillButton(label) { play(style, it) }.apply {
+            // back on this tab mid-demo: its chip is still the one playing
+            if (style == playingStyle) { isSelected = true; playing = this }
+        }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
-    private fun play(style: String) {
+    private fun play(style: String, chip: View) {
         Demo.show(this, style)
+        playing?.isSelected = false
+        playingStyle = style
+        playing = chip.apply { isSelected = true }
         // it still plays on the stage, but say why the real island stays empty
         if (Island.onChange == null) demoHint.visibility = View.VISIBLE
     }
 
-    /** One tab of the segmented control: bone when selected, basalt otherwise. */
-    private fun segment(label: String, onClick: () -> Unit) = text(label, 14f, PUMICE, 500).apply {
+    /** One tab of the segmented control: a bone segment when selected, the track showing through otherwise. */
+    private fun segment(label: String, onClick: () -> Unit) = text(label, 14f, PUMICE, 600).apply {
         val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
         gravity = Gravity.CENTER
-        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        minHeight = dp(48)
+        setPadding(dp(12), dp(8), dp(12), dp(8)) // a large font size wraps the label onto two lines instead of cutting it
         setTextColor(ColorStateList(states, intArrayOf(INK, PUMICE)))
-        val shape = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); color = ColorStateList(states, intArrayOf(BONE, BASALT)) }
+        val shape = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); color = ColorStateList(states, intArrayOf(BONE, Color.TRANSPARENT)) }
         background = ripple(shape)
         isClickable = true
         setOnClickListener { onClick() }
@@ -478,6 +506,9 @@ class MainActivity : Activity() {
 
     private fun signed(v: Int) = if (v > 0) "+$v" else "$v"
 
+    private fun copy(cmd: String) =
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("adb command", cmd))
+
     /** The app's own page in Settings; the generic list if this build has no such page or keeps it to system apps. */
     private fun open(detail: Intent, fallback: String) =
         try { startActivity(detail) } catch (e: ActivityNotFoundException) { startActivity(Intent(fallback)) }
@@ -485,10 +516,9 @@ class MainActivity : Activity() {
 
     private fun enable(v: View, on: Boolean) { v.isEnabled = on; v.alpha = if (on) 1f else 0.4f }
 
-    /** Filled green check when granted, numbered ring when not. Pops only on a fresh grant, never on first bind. */
+    /** Filled green check and what it now does when granted; numbered ring and what to do when not. */
     private fun mark(i: Int, done: Boolean) {
         val s = steps[i]
-        val fresh = s.done == false && done
         s.done = done
         val ring = s.dot.background as GradientDrawable
         if (done) {
@@ -501,10 +531,7 @@ class MainActivity : Activity() {
             s.action.text = s.todo; s.action.setTextColor(BONE)
         }
         (s.dot.parent as FrameLayout).getChildAt(1).visibility = if (done) View.GONE else View.VISIBLE
-        if (fresh && ValueAnimator.areAnimatorsEnabled()) {
-            s.dot.scaleX = 0.6f; s.dot.scaleY = 0.6f
-            s.dot.animate().scaleX(1f).scaleY(1f).setDuration(380).setInterpolator(OvershootInterpolator(2.5f)).start()
-        }
+        s.sub.text = if (done) s.doneSub else s.todoSub
     }
 
     private fun weight(w: Int) = Typeface.create(Typeface.DEFAULT, w, false)
@@ -540,14 +567,15 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun step(n: Int, title: String, sub: String, todo: String = "Allow", onClick: () -> Unit): View {
+    private fun step(n: Int, title: String, sub: String, todo: String = "Allow", doneSub: String = sub, onClick: () -> Unit): View {
         val dot = ImageView(this).apply {
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
             setPadding(dp(5), dp(5), dp(5), dp(5))
         }
         val num = text("$n", 13f, PUMICE, 600).apply { gravity = Gravity.CENTER }
         val action = text(todo, 15f, BONE, 600)
-        steps += Step(dot, action, todo)
+        val subView = text(sub, 13f, PUMICE)
+        steps += Step(dot, action, todo, subView, sub, doneSub)
         return row(onClick).apply {
             addView(FrameLayout(context).apply {
                 addView(dot, FrameLayout.LayoutParams(dp(28), dp(28)))
@@ -556,7 +584,7 @@ class MainActivity : Activity() {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(text(title, 16f, BONE, 500))
-                addView(text(sub, 13f, PUMICE))
+                addView(subView)
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(action)
         }
@@ -595,6 +623,7 @@ class MainActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(6))
+            clipToPadding = false // the bar reaches into this padding so its thumb is whole at either end
             addView(LinearLayout(context).apply {
                 addView(text(s.label, 16f, BONE), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 addView(readout)
@@ -607,7 +636,8 @@ class MainActivity : Activity() {
                 progressTintList = ColorStateList.valueOf(BONE)
                 progressBackgroundTintList = ColorStateList.valueOf(PUMICE) // the framework track draws at ~30% alpha, so TRACK vanished
                 thumbTintList = ColorStateList.valueOf(BONE)
-                setPadding(0, dp(12), 0, dp(12))
+                // room for the thumb at either end; the negative margins below keep the track in line with the labels
+                setPadding(dp(12), dp(12), dp(12), dp(12))
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(b: SeekBar, p: Int, user: Boolean) {
                         readout.text = fmt(p); b.stateDescription = readout.text
@@ -617,19 +647,26 @@ class MainActivity : Activity() {
                     override fun onStartTrackingTouch(b: SeekBar) { Island.calibrating = true }
                     override fun onStopTrackingTouch(b: SeekBar) { Island.calibrating = false }
                 })
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = -dp(12); marginEnd = -dp(12)
             })
         }
     }
 
-    /** Pill-shaped chip in the group surface colour: the island's shape. */
-    private fun pillButton(label: String, onClick: () -> Unit) = text(label, 15f, BONE, 500).apply {
+    /** Pill-shaped chip in the group surface colour: the island's shape. Selected (playing): seam fill, bone outline. */
+    private fun pillButton(label: String, onClick: (View) -> Unit) = text(label, 15f, BONE, 500).apply {
+        val states = arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf())
         gravity = Gravity.CENTER
-        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
-        setPadding(dp(18), 0, dp(18), 0)
-        val shape = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(BASALT) }
+        minHeight = dp(48)
+        setPadding(dp(18), dp(10), dp(18), dp(10))
+        val shape = GradientDrawable().apply {
+            cornerRadius = dp(24).toFloat()
+            color = ColorStateList(states, intArrayOf(SEAM, BASALT))
+            setStroke(max(1, dp(1)) * 3 / 2, ColorStateList(states, intArrayOf(BONE, Color.TRANSPARENT)))
+        }
         background = ripple(shape)
         isClickable = true
-        setOnClickListener { onClick() }
+        setOnClickListener { onClick(it) }
         accessibilityDelegate = object : View.AccessibilityDelegate() { // View has no setter for the class name TalkBack reads as the role
             override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info); info.className = Button::class.java.name

@@ -1,562 +1,414 @@
 ---
-version: alpha
-name: Apple-design-analysis
-description: A photography-first interface that turns marketing into a museum gallery. Edge-to-edge product tiles alternate light and dark canvases, framed by SF Pro Display headlines with negative letter-spacing and a single Action Blue (#0066cc) interactive color. UI chrome recedes so the product can speak — no decorative gradients, no shadows on chrome, only the one signature drop-shadow under product imagery resting on a surface.
-
+name: Tab Island
+description: A true-black Dynamic Island for Android, and the black-and-basalt settings screen that is its fitting room.
 colors:
-  primary: "#0066cc"
-  primary-focus: "#0071e3"
-  primary-on-dark: "#2997ff"
-  ink: "#1d1d1f"
-  body: "#1d1d1f"
-  body-on-dark: "#ffffff"
-  body-muted: "#cccccc"
-  ink-muted-80: "#333333"
-  ink-muted-48: "#7a7a7a"
-  divider-soft: "#f0f0f0"
-  hairline: "#e0e0e0"
-  canvas: "#ffffff"
-  canvas-parchment: "#f5f5f7"
-  surface-pearl: "#fafafc"
-  surface-tile-1: "#272729"
-  surface-tile-2: "#2a2a2c"
-  surface-tile-3: "#252527"
-  surface-black: "#000000"
-  surface-chip-translucent: "#d2d2d7"
-  on-primary: "#ffffff"
-  on-dark: "#ffffff"
-
+  ink: "#000000"
+  basalt: "#161618"
+  seam: "#2A2A2E"
+  track-grey: "#6E6E76"
+  pumice: "#9E9EA6"
+  bone: "#F4F4F1"
+  white: "#FFFFFF"
+  art-tile: "#2C2C2E"
+  muted-white: "#FFFFFFB3"
+  island-track: "#FFFFFF33"
+  action-fill: "#FFFFFF26"
+  press-ripple: "#FFFFFF24"
+  signal-green: "#30D158"
+  signal-orange: "#FF9F0A"
+  signal-red: "#FF453A"
+  signal-blue: "#2997FF"
+  signal-yellow: "#FFD60A"
 typography:
-  hero-display:
-    fontFamily: "SF Pro Display, system-ui, -apple-system, sans-serif"
-    fontSize: 56px
+  display:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "30px"
     fontWeight: 600
-    lineHeight: 1.07
-    letterSpacing: -0.28px
-  display-lg:
-    fontFamily: "SF Pro Display, system-ui, -apple-system, sans-serif"
-    fontSize: 40px
+    lineHeight: 1.15
+    letterSpacing: "-0.02em"
+  headline:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "17px"
     fontWeight: 600
-    lineHeight: 1.1
-    letterSpacing: 0
-  display-md:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 34px
-    fontWeight: 600
-    lineHeight: 1.47
-    letterSpacing: -0.374px
-  lead:
-    fontFamily: "SF Pro Display, system-ui, -apple-system, sans-serif"
-    fontSize: 28px
+    lineHeight: 1.15
+  title:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "16px"
     fontWeight: 400
-    lineHeight: 1.14
-    letterSpacing: 0.196px
-  lead-airy:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 24px
-    fontWeight: 300
-    lineHeight: 1.5
-    letterSpacing: 0
-  tagline:
-    fontFamily: "SF Pro Display, system-ui, -apple-system, sans-serif"
-    fontSize: 21px
-    fontWeight: 600
-    lineHeight: 1.19
-    letterSpacing: 0.231px
-  body-strong:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 17px
-    fontWeight: 600
-    lineHeight: 1.24
-    letterSpacing: -0.374px
+    lineHeight: 1.15
   body:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 17px
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "15px"
     fontWeight: 400
-    lineHeight: 1.47
-    letterSpacing: -0.374px
-  dense-link:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 17px
-    fontWeight: 400
-    lineHeight: 2.41
-    letterSpacing: 0
-  caption:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 14px
-    fontWeight: 400
-    lineHeight: 1.43
-    letterSpacing: -0.224px
-  caption-strong:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 14px
+    lineHeight: 1.15
+  label:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 500
+    lineHeight: 1.15
+  segment:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "14px"
     fontWeight: 600
-    lineHeight: 1.29
-    letterSpacing: -0.224px
-  button-large:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 18px
-    fontWeight: 300
-    lineHeight: 1.0
-    letterSpacing: 0
-  button-utility:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 14px
+    lineHeight: 1.15
+  caption:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "13px"
     fontWeight: 400
-    lineHeight: 1.29
-    letterSpacing: -0.224px
-  fine-print:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 12px
+    lineHeight: 1.15
+  readout:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 500
+    lineHeight: 1.15
+    fontFeature: "tnum"
+  island-name:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "21px"
+    fontWeight: 600
+    letterSpacing: "0.011em"
+  island-title:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "17px"
+    fontWeight: 600
+    letterSpacing: "-0.022em"
+  island-body:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "15px"
     fontWeight: 400
-    lineHeight: 1.0
-    letterSpacing: -0.12px
-  micro-legal:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 10px
+    letterSpacing: "-0.016em"
+  island-compact:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.3
-    letterSpacing: -0.08px
-  nav-link:
-    fontFamily: "SF Pro Text, system-ui, -apple-system, sans-serif"
-    fontSize: 12px
+    letterSpacing: "-0.016em"
+  island-compact-value:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "14px"
+    fontWeight: 600
+    letterSpacing: "-0.016em"
+    fontFeature: "tnum"
+  island-meta:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "13px"
     fontWeight: 400
-    lineHeight: 1.0
-    letterSpacing: -0.12px
-
+  island-action:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+  island-time:
+    fontFamily: "Google Sans, Roboto, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    fontFeature: "tnum"
 rounded:
-  none: 0px
-  xs: 5px
-  sm: 8px
-  md: 11px
-  lg: 18px
-  pill: 9999px
-  full: 9999px
-
+  seek: "2px"
+  art: "12px"
+  switch: "16px"
+  action: "18px"
+  call-text: "22px"
+  control: "24px"
+  stage: "28px"
+  island-card: "40px"
+  full: "9999px"
 spacing:
-  xxs: 4px
-  xs: 8px
-  sm: 12px
-  md: 17px
-  lg: 24px
-  xl: 32px
-  xxl: 48px
-  section: 80px
-
+  hairline: "1px"
+  track-inset: "4px"
+  chip-gap: "8px"
+  caption-gap: "10px"
+  row-y: "12px"
+  gutter: "16px"
+  block: "24px"
+  page-top: "28px"
+  section: "36px"
 components:
-  button-primary:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.body}"
-    rounded: "{rounded.pill}"
-    padding: 11px 22px
-  button-primary-focus:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    rounded: "{rounded.pill}"
-  button-primary-active:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    rounded: "{rounded.pill}"
-  button-secondary-pill:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.primary}"
-    typography: "{typography.body}"
-    rounded: "{rounded.pill}"
-    padding: 11px 22px
-  button-dark-utility:
+  group:
+    backgroundColor: "{colors.basalt}"
+    rounded: "{rounded.control}"
+  list-row:
+    textColor: "{colors.bone}"
+    typography: "{typography.title}"
+    padding: "12px 16px"
+    height: "64px"
+  switch-row:
+    textColor: "{colors.bone}"
+    typography: "{typography.title}"
+    padding: "8px 16px"
+    height: "56px"
+  switch-track-on:
+    backgroundColor: "{colors.bone}"
+    rounded: "{rounded.switch}"
+    width: "52px"
+    height: "32px"
+  switch-track-off:
+    backgroundColor: "{colors.track-grey}"
+    rounded: "{rounded.switch}"
+    width: "52px"
+    height: "32px"
+  switch-thumb:
     backgroundColor: "{colors.ink}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.button-utility}"
-    rounded: "{rounded.sm}"
-    padding: 8px 15px
-  button-pearl-capsule:
-    backgroundColor: "{colors.surface-pearl}"
-    textColor: "{colors.ink-muted-80}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.md}"
-    padding: 8px 14px
-  button-store-hero:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.button-large}"
-    rounded: "{rounded.pill}"
-    padding: 14px 28px
-  button-icon-circular:
-    backgroundColor: "{colors.surface-chip-translucent}"
+    rounded: "{rounded.full}"
+    size: "24px"
+  chip:
+    backgroundColor: "{colors.basalt}"
+    textColor: "{colors.bone}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "10px 18px"
+    height: "48px"
+  chip-playing:
+    backgroundColor: "{colors.seam}"
+    textColor: "{colors.bone}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "10px 18px"
+    height: "48px"
+  segment-track:
+    backgroundColor: "{colors.basalt}"
+    rounded: "{rounded.stage}"
+    padding: "4px"
+  segment:
+    textColor: "{colors.pumice}"
+    typography: "{typography.segment}"
+    rounded: "{rounded.control}"
+    height: "48px"
+  segment-selected:
+    backgroundColor: "{colors.bone}"
+    textColor: "{colors.ink}"
+    typography: "{typography.segment}"
+    rounded: "{rounded.control}"
+    height: "48px"
+  stage:
+    backgroundColor: "{colors.basalt}"
+    rounded: "{rounded.stage}"
+    height: "208px"
+  step-mark:
+    textColor: "{colors.pumice}"
+    rounded: "{rounded.full}"
+    size: "28px"
+  step-mark-done:
+    backgroundColor: "{colors.signal-green}"
     textColor: "{colors.ink}"
     rounded: "{rounded.full}"
-    size: 44px
-  text-link:
-    backgroundColor: transparent
-    textColor: "{colors.primary}"
-    typography: "{typography.body}"
-  text-link-on-dark:
-    backgroundColor: transparent
-    textColor: "{colors.primary-on-dark}"
-    typography: "{typography.body}"
-  global-nav:
-    backgroundColor: "{colors.surface-black}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.nav-link}"
-    height: 44px
-  sub-nav-frosted:
-    backgroundColor: "{colors.canvas-parchment}"
-    textColor: "{colors.ink}"
-    typography: "{typography.tagline}"
-    height: 52px
-  product-tile-light:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-lg}"
-    rounded: "{rounded.none}"
-    padding: 80px
-  product-tile-parchment:
-    backgroundColor: "{colors.canvas-parchment}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-lg}"
-    rounded: "{rounded.none}"
-    padding: 80px
-  product-tile-dark:
-    backgroundColor: "{colors.surface-tile-1}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.display-lg}"
-    rounded: "{rounded.none}"
-    padding: 80px
-  product-tile-dark-2:
-    backgroundColor: "{colors.surface-tile-2}"
-    textColor: "{colors.on-dark}"
-    rounded: "{rounded.none}"
-  product-tile-dark-3:
-    backgroundColor: "{colors.surface-tile-3}"
-    textColor: "{colors.on-dark}"
-    rounded: "{rounded.none}"
-  store-utility-card:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-strong}"
-    rounded: "{rounded.lg}"
-    padding: 24px
-  configurator-option-chip:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.caption}"
-    rounded: "{rounded.pill}"
-    padding: 12px 16px
-  configurator-option-chip-selected:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.pill}"
-  search-input:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.pill}"
-    padding: 12px 20px
-    height: 44px
-  floating-sticky-bar:
-    backgroundColor: "{colors.canvas-parchment}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    height: 64px
-    padding: 12px 32px
-  environment-quote-card:
-    backgroundColor: "{colors.surface-tile-1}"
-    textColor: "{colors.on-dark}"
-    typography: "{typography.display-lg}"
-    rounded: "{rounded.none}"
-    padding: 80px
-  footer:
-    backgroundColor: "{colors.canvas-parchment}"
-    textColor: "{colors.ink-muted-80}"
-    typography: "{typography.fine-print}"
-    padding: 64px
+    size: "28px"
+  status-dot:
+    rounded: "{rounded.full}"
+    size: "8px"
+  island-pill:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.white}"
+    typography: "{typography.island-compact}"
+    rounded: "{rounded.full}"
+  island-card:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.white}"
+    rounded: "{rounded.island-card}"
+    padding: "0 16px"
+  call-button-answer:
+    backgroundColor: "{colors.signal-green}"
+    textColor: "{colors.white}"
+    rounded: "{rounded.full}"
+    size: "44px"
+  call-button-decline:
+    backgroundColor: "{colors.signal-red}"
+    textColor: "{colors.white}"
+    rounded: "{rounded.full}"
+    size: "44px"
+  island-action-chip:
+    backgroundColor: "{colors.action-fill}"
+    textColor: "{colors.white}"
+    typography: "{typography.island-action}"
+    rounded: "{rounded.action}"
+    padding: "0 10px"
+    height: "36px"
 ---
+
+# Design System: Tab Island
+
+Units: this is a native Android app. In the tokens above, `px` stands for Android **dp** (lengths) and **sp** (text sizes), one to one. Colour alpha is written CSS-style (`#RRGGBBAA`); the Kotlin source writes the same values as `0xAARRGGBB`. Sources: `MainActivity.kt` (settings), `IslandView.kt` (the island), `Island.kt` (signal colours, priority), `Spring.kt` (motion).
 
 ## Overview
 
-Apple's web presence is a masterclass in **reverent product photography framed by near-invisible UI**. Every page is a stack of edge-to-edge product "tiles" — alternating light and dark canvases, each centered on a hero headline, a one-line tagline, two tiny blue pill CTAs, and an impossibly crisp product render. Nothing competes with the product. Typography is confident but quiet; color is either pure white, an off-white parchment, or a near-black tile; interactive elements are a single, quiet blue.
+**Creative North Star: "The Fitting Room"**
 
-Density is unusually low even by contemporary SaaS standards. Each tile occupies roughly one viewport, and there is no decorative chrome — no borders, no gradients, no decorative frames, no shadows on headlines. Elevation appears only when a product image rests on a surface (a single soft `rgba(0, 0, 0, 0.22) 3px 5px 30px` drop for visual weight). The result is a catalog that feels more like a museum gallery: the wall disappears and the artifact takes over.
+Tab Island is one material in two places. On top of any app, it is a true-black pill grown out of the front camera, measured from the real cutout, that swells into cards for music, calls and messages and shrinks back into the hole on a spring. In the settings app, the same black becomes the page, and grey basalt slabs (each group "a small island") hold the switches. The settings screen is the island's fitting room: the real `IslandView` sits on a stage at 1:1 scale under a drawn camera ring, you drag it to fit, and every style plays on it from a chip.
 
-Store and shop surfaces retain the same chassis but switch modes. The product configurator (iPhone 17 Pro, accessories grid) introduces a tight grid of white utility cards at `{rounded.lg}` (18px) radius with a thin border, paired with a persistent thin sub-nav strip. The environment page leans darker and more editorial. Across all five surfaces the typographic system, spacing rhythm, and the single blue accent are consistent — this is one design language expressed at different volumes.
+The palette is monochrome on purpose. Black, basalt, bone and pumice do all the structural work; colour appears only as signal (green, orange, red, yellow, blue), each tied to a meaning, plus colour borrowed from content (album art, contact photos, an app's brand colour). Density is relaxed and thumb-first: 48dp chips and tabs, 56 to 64dp rows, a single column with a 16dp gutter.
+
+Motion belongs to the island. It is the only thing that springs; the settings chrome moves only in short 150ms fades (the stage hint and the centre guide); chips swap in place and setup marks change without a pop. Every animation checks the system "Remove animations" setting.
 
 **Key Characteristics:**
-- Photography-first presentation; UI recedes so the product can speak.
-- Alternating full-bleed tile sections: white/parchment ↔ near-black, with the color change itself acting as the section divider.
-- Single blue accent (`{colors.primary}` — #0066cc) carries every interactive element. No second brand color exists.
-- Two button grammars: tiny blue pill CTAs (`{rounded.pill}`) and compact utility rects (`{rounded.sm}`).
-- SF Pro Display + SF Pro Text — negative letter-spacing at display sizes for the signature "Apple tight" headline feel.
-- Whisper-soft elevation used only when a product image needs to breathe — exactly one drop-shadow in the entire system.
-- Tight two-row nav: slim `{component.global-nav}` + product-specific `{component.sub-nav-frosted}` with persistent right-aligned primary CTA.
-- Section rhythm across multiple pages: light hero → dark product tile → light utility tile → dark tile → parchment footer — a predictable pulse.
+- True black (#000000) island and page, never tinted at rest, never shadowed.
+- Basalt groups with inset seam hairlines instead of cards with shadows.
+- Monochrome controls: bone is "on/selected", ink is the thumb, pumice is secondary.
+- Pills everywhere: every tappable chip and tab is fully rounded.
+- Spring motion for the island's size, scale-and-blur materialising for its content.
+- Colour is signal or borrowed from content; never decoration.
 
 ## Colors
 
-> **Source pages analyzed:** homepage, environment, store, iPhone 17 Pro buy page, accessories index. The color system is identical across all five surfaces; only the surface-mode mix differs.
+A monochrome black-to-bone scale with five semantic signal colours that each mean one thing.
 
-### Brand & Accent
-- **Action Blue** (`{colors.primary}` — #0066cc): The single brand-level interactive color. All text links, all blue pill CTAs ("Learn more", "Buy"), and the focus ring root. This is Apple's quiet but universal "click me" signal. Press state shifts to a slightly darker variant via the active scale transform rather than a hex change.
-- **Focus Blue** (`{colors.primary-focus}` — #0071e3): A marginally brighter sibling of Action Blue, reserved for the keyboard focus ring on buttons (`outline: 2px solid`).
-- **Sky Link Blue** (`{colors.primary-on-dark}` — #2997ff): A brighter blue used on dark surfaces for in-copy links and inline callouts, where Action Blue would disappear against the tile background.
+### Primary
+- **Bone** (#F4F4F1): the one bright tone in settings. Primary text, the selected segment's fill, the switch's on track, the slider's progress and thumb, the stage's centre guide when the island is centred on the camera. Warm off-white, so it reads softer than pure white against black.
 
-### Surface
-- **Pure White** (`{colors.canvas}` — #ffffff): The dominant canvas. Content, utility cards, store tiles, configurator grids.
-- **Parchment** (`{colors.canvas-parchment}` — #f5f5f7): The signature Apple off-white. Used for alternating light tiles, footer region, and the default page canvas in store utility sections. Just different enough from white to create rhythm.
-- **Pearl Button** (`{colors.surface-pearl}` — #fafafc): A near-white used as the fill for secondary "ghost" buttons — lighter than the parchment canvas so the button still reads as a button against `{colors.canvas-parchment}`.
-- **Near-Black Tile 1** (`{colors.surface-tile-1}` — #272729): The primary dark-tile surface on the homepage product grid.
-- **Near-Black Tile 2** (`{colors.surface-tile-2}` — #2a2a2c): A micro-step lighter — used where a dark tile sits directly above or below Tile 1 to create the faintest separation.
-- **Near-Black Tile 3** (`{colors.surface-tile-3}` — #252527): A micro-step darker — used at the bottom of the stack and in embedded video/player frames.
-- **Pure Black** (`{colors.surface-black}` — #000000): Reserved for true void — video player backgrounds, edge-to-edge photographic overlays, the global nav bar background.
-- **Translucent Chip Gray** (`{colors.surface-chip-translucent}` — #d2d2d7): The base hex of the translucent gray chip used over photography for circular control buttons. In production, applied at ~64% alpha as `rgba(210, 210, 215, 0.64)`.
+### Secondary (signal colours, shared by both surfaces)
+- **Signal Green** (#30D158): on, done, go. Granted setup step, "island is on" status dot, answer button, ringing-call ripple and caption, call chronometer, charging.
+- **Signal Orange** (#FF9F0A): partial or time-bound. Status dot for "enabled but not finished", timers and stopwatch, alarm, vibrate mode.
+- **Signal Red** (#FF453A): stop or warning. Decline/hang-up button, low battery, silent mode, status dot for "island is off".
+- **Signal Yellow** (#FFD60A): the flashlight live activity only.
+- **Signal Blue** (#2997FF): download progress ring, and the fallback tint of a notification card when the app gives no colour and its icon has none.
 
-### Text
-- **Near-Black Ink** (`{colors.ink}` — #1d1d1f): The voice of every headline, every body paragraph, and the dark utility button's fill. Chosen instead of pure black to keep the page feeling photographic rather than printed.
-- **Body** (`{colors.body}` — #1d1d1f): Same hex as ink — Apple uses one near-black tone for all text on light surfaces.
-- **Body On Dark** (`{colors.body-on-dark}` — #ffffff): All text on dark tiles and on the global nav bar.
-- **Body Muted** (`{colors.body-muted}` — #cccccc): Secondary copy on dark tiles where pure white would be too loud.
-- **Ink Muted 80** (`{colors.ink-muted-80}` — #333333): Body text on the white Pearl Button surface — slightly softer than pure black.
-- **Ink Muted 48** (`{colors.ink-muted-48}` — #7a7a7a): Disabled button text and legal fine-print.
+### Neutral
+- **Ink** (#000000): the island, the settings page ground, the switch thumb, text on a selected segment, the check on a granted step.
+- **Basalt** (#161618): groups, chips, the segmented control's track, the stage.
+- **Seam** (#2A2A2E): 1px hairlines between rows in a group, inset 16dp from the start; the fill of the chip whose demo is playing.
+- **Track Grey** (#6E6E76): the switch's off track (3.2:1 on basalt), the camera ring and the guide line when off-centre.
+- **Pumice** (#9E9EA6): secondary text in settings (status, captions, hints, unselected tab labels), the numbered ring of an unfinished step. Chosen to keep at least 4.5:1 on basalt.
+- **White** (#FFFFFF): all primary text and glyphs on the island.
+- **Muted White** (#FFFFFFB3, white at 70%): secondary copy on the island (artist, call caption, app name, times). Translucent on purpose, so on a tinted card it takes the card's hue instead of sitting on it as grey.
+- **Island Track** (#FFFFFF33): the unfilled part of the music seek bar.
+- **Action Fill** (#FFFFFF26): the fill of notification action chips.
+- **Art Tile** (#2C2C2E): the placeholder behind album art and round images while they load. Glyphs and app icons in the compact pill sit straight on black, without it.
+- **Press Ripple** (#FFFFFF24): the ripple on every pressable settings surface.
 
-### Hairlines & Borders
-- **Divider Soft** (`{colors.divider-soft}` — #f0f0f0): The "border" tone on secondary buttons — functions as a ring shadow rather than a hard line. In production, often applied as `rgba(0, 0, 0, 0.04)`.
-- **Hairline** (`{colors.hairline}` — #e0e0e0): The 1px hairline border on store utility cards and configurator chips.
+### Borrowed colour (computed, not tokens)
+- **Music accent:** the album art averaged to one pixel, brightened to HSV value at least 0.9. Colours the waveform and the seek bar fill. White when there is no art.
+- **Notification card:** a top-to-bottom gradient from black (under the camera band) into the app's colour (`Notification.color`, else the icon's dominant colour, else Signal Blue), with saturation clamped to 0.45–0.85 and HSV value 0.22 then 0.48, so white text stays legible on yellow and green brands.
+- **Card glow:** album art or caller photo, blurred 48dp at 60% opacity, under a black scrim gradient (20% → 67% → 90% black, top to bottom).
 
-### Brand Gradient
-**No decorative gradients.** Atmospheric depth on product photography (the iPhone 17 Pro camera plate, the Apple Watch bands, AirPods reflections) is inherent to the imagery, not a CSS gradient overlay. The environment page's hero uses photographic atmosphere (mountain vista at dawn) but no gradient tokens are defined. Apple is the rare luxury-brand site with zero gradient-based design tokens.
+### Named Rules
+**The True Black Rule.** The island is #000000 on screen, always (a brand commitment in PRODUCT.md). It may carry borrowed colour inside a card, but the pill itself is never tinted, lightened or given a border.
+
+**The Signal Rule.** Each signal colour means one thing, on both surfaces. In settings, green appears only when something is on or done; a control is never green just to look active.
+
+**The Monochrome Control Rule.** Settings controls are bone on basalt with ink thumbs. Selected and on are shown by bone fill, not by an accent colour.
 
 ## Typography
 
-### Font Family
-- **Display**: `SF Pro Display, system-ui, -apple-system, sans-serif` — Apple's proprietary display face, optimized for sizes ≥ 19px. Defines the voice of every headline.
-- **Body / UI**: `SF Pro Text, system-ui, -apple-system, sans-serif` — the text-optimized variant used for body copy, captions, buttons, and links below 20px.
-- **OpenType features**: `font-variant-numeric: numerator` is enabled on numeric links (pricing tables, spec sheets). Display sizes rely on tight tracking rather than contextual ligatures.
+**Island Font:** Google Sans (requested by family name `google-sans`; falls back to Roboto where it does not exist)
+**Settings Font:** the system default sans (`Typeface.DEFAULT`) at explicit weights
+**Numerals:** tabular figures (`tnum`) wherever numbers change in place
 
-### Hierarchy
+**Character:** One quiet grotesque at three weights (400, 500, 600) and no display face. Hierarchy comes from size and weight steps, never from colour beyond bone/pumice or white/muted-white.
 
-| Token | Size | Weight | Line Height | Letter Spacing | Use |
-|---|---|---|---|---|---|
-| `{typography.hero-display}` | 56px | 600 | 1.07 | -0.28px | Hero headline; the signature "Apple tight" tracking |
-| `{typography.display-lg}` | 40px | 600 | 1.10 | 0 | Tile headlines atop every product tile |
-| `{typography.display-md}` | 34px | 600 | 1.47 | -0.374px | Section heads (SF Pro Text at display proportions) |
-| `{typography.lead}` | 28px | 400 | 1.14 | 0.196px | Product tile subcopy |
-| `{typography.lead-airy}` | 24px | 300 | 1.5 | 0 | Environment-page lead paragraphs (the rare weight 300) |
-| `{typography.tagline}` | 21px | 600 | 1.19 | 0.231px | Sub-tile tagline; sub-nav category name |
-| `{typography.body-strong}` | 17px | 600 | 1.24 | -0.374px | Inline strong emphasis |
-| `{typography.body}` | 17px | 400 | 1.47 | -0.374px | Default paragraph |
-| `{typography.dense-link}` | 17px | 400 | 2.41 | 0 | Footer / store utility link lists (relaxed leading) |
-| `{typography.caption}` | 14px | 400 | 1.43 | -0.224px | Secondary captions, button text |
-| `{typography.caption-strong}` | 14px | 600 | 1.29 | -0.224px | Emphasized captions |
-| `{typography.button-large}` | 18px | 300 | 1.0 | 0 | Store hero CTAs (the rare weight 300) |
-| `{typography.button-utility}` | 14px | 400 | 1.29 | -0.224px | Utility/nav button labels |
-| `{typography.fine-print}` | 12px | 400 | 1.0 | -0.12px | Fine-print, footer body |
-| `{typography.micro-legal}` | 10px | 400 | 1.3 | -0.08px | Micro legal disclaimers |
-| `{typography.nav-link}` | 12px | 400 | 1.0 | -0.12px | Global nav menu items |
+### Hierarchy (settings)
+- **Display** (600, 30sp, -0.02em): the "Tab Island" title only. An accessibility heading.
+- **Headline** (600, 17sp): section headings ("Set up", "What the island shows", "Fit to your camera"). 36dp above, 10dp below.
+- **Title** (400, 16sp): switch and row labels. Step titles use the same size at 500.
+- **Body** (400, 15sp): the status line beside the status dot.
+- **Label** (500 for chips and slider readouts, 600 for row actions like "Allow", "Open", "Reset"; 15sp).
+- **Segment** (600, 14sp): tab labels; at a large font size a label wraps to a second line rather than being cut.
+- **Caption** (400, 13sp): hints and explanations in pumice. The stage readout (x/y/w/h) uses 500 with tabular figures; the step number uses 600.
 
-### Principles
+All settings text uses a 1.15 line-height multiplier and scales with the system font size.
 
-- **Negative letter-spacing at display sizes.** Every headline at 17px and up carries a slight tracking tighten (`-0.12 → -0.374px`). This produces the iconic "Apple tight" headline cadence. Never used at 12px or below.
-- **Body copy at 17px, not 16px.** Apple breaks the SaaS convention and runs paragraph text at 17px. The extra pixel gives the page an unmistakable "reading, not scanning" pace.
-- **Weight 300 is real and rare.** Used deliberately on a handful of large-size reads (`{typography.button-large}` at 18px/300 and `{typography.lead-airy}` at 24px/300). It's not an accident — it's a light-atmosphere cue reserved for moments where the content should feel airy.
-- **Weight 600, not 700, for headlines.** Apple's headlines sit at weight 600. Weight 700 is used sparingly for `{typography.tagline}` (21px) when a touch more assertion is needed.
-- **Line-height is context-specific.** Display sizes use 1.07–1.19 (tight). Body uses 1.47. Utility link stacks in the footer/store use an unusually relaxed 2.41 (`{typography.dense-link}`). The 2.41 is not a bug — it's how the footer's dense link columns breathe.
-- **Weight 500 is deliberately absent.** The ladder is 300 / 400 / 600 / 700. Mid-weight readings always use 600.
+### Hierarchy (island)
+Tracking is set by size: +0.011em at 20sp and up, -0.022em at 17–19sp, -0.016em at 14–16sp, none below.
+- **Caller name** (600, 21sp): the incoming call card.
+- **Card title** (600, 17sp): song title, notification sender (up to 2 lines).
+- **Card body** (400, 15sp): artist (muted white), notification text (up to 2 lines).
+- **Compact** (400, 14sp left label; 600, 14sp right value with tabular figures, in the item's signal colour): the pill's two halves, and the call caption.
+- **Meta** (400, 13sp, muted white): the app name on a notification card.
+- **Action** (600, 13sp): notification action chips.
+- **Time** (400, 12sp, tabular, muted white): elapsed and remaining time on the music card.
 
-### Note on Font Substitutes
-SF Pro is Apple's proprietary system font. When building off-system:
+Island text is single-line and ellipsized unless noted.
 
-- Use `system-ui, -apple-system, BlinkMacSystemFont` as the first stack entry — on macOS/iOS/Safari this resolves to the real SF Pro.
-- For non-Apple platforms, **Inter** (Google Fonts, variable) is the closest open-source equivalent. Inter at weight 600 with `font-feature-settings: "ss03"` approximates SF Pro's rounded "a" character.
-- Nudge `letter-spacing` down by `-0.01em` on display sizes to re-create the Apple tight feel; Inter's default tracking runs slightly wider than SF Pro.
-- For body text, tighten line-height by `0.03` (from 1.47 → 1.44) when substituting Inter — Inter's taller x-height needs less leading.
+### Named Rules
+**The Tabular Rule.** Any number that changes in place (chronometers, seek times, slider readouts, the x/y/w/h readout) uses tabular figures, so the pill and the readouts never jitter as digits change.
 
 ## Layout
 
-### Spacing System
-- **Base unit:** 8px. Sub-base values (2, 4, 5, 6, 7) are used for tight typographic adjustments; structural layout snaps to 8/12/16/20/24.
-- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 17px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px.
-- **Section vertical padding:** `{spacing.section}` (80px) inside a product tile; tiles stack edge-to-edge with 0 gap (the color change provides the break).
-- **Card padding:** `{spacing.lg}` (24px) inside utility grid cards.
-- **Button padding:** 8–11px vertical, 15–22px horizontal.
-- **Universal rhythm constants:** the 17px body line-height multiplier (~25px line) and 21px tagline size show up on every analyzed page.
+**Settings** is a single scrolling column on ink, edge to edge: the window draws behind transparent system bars, the scroll view pads its top by the status bar and cutout inset, and content stops there instead of scrolling under the clock and the island. The column has a 16dp gutter (plus any side inset), 28dp above the title and 32dp plus the navigation inset at the bottom.
 
-### Grid & Container
-- **Max content width:** ~980px on text-heavy sections (environment), ~1440px on product grids (store, accessories), full-bleed for product tiles (homepage).
-- **Column patterns:** 3 to 5 column utility card grid on store/accessories; 2-column side-by-side tiles on homepage occasional sections; single-column centered stack on product tile heroes.
-- **Gutters:** 20–24px between cards in a utility grid.
+First viewport, top to bottom: title; status line (8dp dot, 8dp gap, pumice text); the stage (208dp tall, 18dp below); a caption row with the x/y/w/h readout (10dp below); the segmented control (one basalt track with a 4dp inset holding four segments at least 48dp tall, each its label's width plus an equal share of the rest, 24dp below); wrapping chips (at least 48dp tall, 8dp gaps both ways, 12dp below). The first switch group peeks in below the chips as a scroll cue. Then section headings with their groups: Set up (moves to the end once setup is complete), What the island shows, System events, Behaviour, Fit to your camera.
 
-### Whitespace Philosophy
-Apple's whitespace is the product's pedestal. Every tile begins with at least 64px of air above its headline and 48–64px below. Product renders are never crowded; the nearest content to a product image is at least 40px away. The footer is the only area that breaks this — there, Apple goes deliberately dense to make the full information architecture visible at a glance.
+Inside a group, rows are 64dp minimum with 16dp × 12dp padding; switch rows are 56dp minimum with 16dp × 8dp padding; slider rows have 14dp top and 6dp bottom padding. Hint text sits outside groups with 16dp side padding and 10dp above.
+
+**The stage** places the camera ring at the phone's real cutout size, 44dp from the stage top, horizontally where the real camera sits relative to the screen centre. The island is laid out exactly as the service lays it out on screen. A 1px vertical guide through the camera centre fades in (150ms) while a finger is on the stage.
+
+**The island** is measured from the camera cutout: pill height = cutout height + 2 × 5dp (+ the user's h offset); the gap left for the camera = cutout width + 2 × 5dp; the idle pill is as wide as the larger of the pill height and the gap (+ the user's w offset); cards span the screen width minus 16dp, minus twice any horizontal camera offset. The compact pill keeps both halves equal width so the camera stays centred. Card content starts below the camera band: music rows ride up beside the camera (top padding = pill height − 10dp, at least 16dp); call and message rows start under it (pill height − 4dp, at least 20dp). Cards keep a design height (music 148dp, call 52dp, message 68dp below that padding) and grow when a large font needs it.
 
 ## Elevation & Depth
 
-| Level | Treatment | Use |
-|---|---|---|
-| Flat | No shadow, no border | Full-bleed tiles, global nav, footer, body sections |
-| Soft hairline | 1px `rgba(0, 0, 0, 0.08)` border | Utility cards, sub-nav frosted-glass separator |
-| Backdrop blur | `backdrop-filter: blur(N)` on Parchment 80% | Sub-nav and the iPhone buy floating sticky bar |
-| Product shadow | `rgba(0, 0, 0, 0.22) 3px 5px 30px 0` | Product renders resting on a surface (the only true "shadow" in the system) |
+Flat. No surface in either place has a shadow. Depth is tonal: ink ground, basalt slabs, seam hairlines. The island deliberately has no drop shadow: its margin would create a touchable dead zone around cards where taps cannot reach the app below. Inside island cards, depth comes from content: a 48dp blur of the album art or caller photo at 60% opacity, under a black scrim, and the notification card's black-to-brand gradient. Blur (up to 16px) is also used in motion, never at rest on chrome.
 
-**Shadow philosophy.** Apple uses **exactly one** drop-shadow, and it is applied to photographic product imagery — never to cards, never to buttons, never to text. Elevation in the UI comes from (a) surface-color change (light tile ↔ dark tile) and (b) backdrop-blur on sticky bars. The single shadow is about giving the product weight, not about UI hierarchy.
-
-### Decorative Depth
-- **Atmospheric imagery** on the environment page (photographic vista) supplies mood; no CSS gradient involved.
-- **Edge-to-edge tile alternation** creates rhythm without borders or shadows — the color change itself is the divider.
-- **Backdrop-filter blur** on `{component.sub-nav-frosted}` and `{component.floating-sticky-bar}` creates a "floating over content" effect that's functional, not decorative.
+### Named Rules
+**The Flat Basalt Rule.** Settings surfaces separate by tone only (ink → basalt → seam). Never add a shadow, border or elevation to a group, chip or the stage.
 
 ## Shapes
 
-### Border Radius Scale
+Everything rounded, nothing boxy.
 
-| Token | Value | Use |
-|---|---|---|
-| `{rounded.none}` | 0px | Full-bleed product tiles (no corner rounding) |
-| `{rounded.xs}` | 5px | Inline links when styled as subtle chips (rare) |
-| `{rounded.sm}` | 8px | Dark utility buttons (Sign In, Bag), inline card imagery |
-| `{rounded.md}` | 11px | White Pearl Button capsules |
-| `{rounded.lg}` | 18px | Store utility cards, accessories grid cards |
-| `{rounded.pill}` | 9999px | Primary blue pill CTAs, sub-nav buy button, configurator option chips, search input — the signature Apple pill |
-| `{rounded.full}` | 9999px / 50% | Circular control chips floating over photography |
+- **Pills:** chips, segments, the switch track, notification action chips and call text buttons all use a radius of half their height (24dp on 48dp, 16dp on 32dp, 18dp on 36dp, 22dp on 44dp). Circles: status dot, step mark, call buttons, contact photos, app badge.
+- **Slabs:** groups 24dp, the stage 28dp. Both clip their children to the outline, so ripples and rows follow the corner.
+- **The island:** a true pill when compact (radius = half the height); as it grows into a card the radius keeps rising with the height up to 40dp (or half the pill height if that is larger), so cards stay soft. Interpolated every frame from the spring's current height.
+- **Concentric corners:** the icon in the compact pill is inset so it stays concentric with the pill's round end: its radius is the pill radius minus the inset (at least 6dp). Album art uses 12dp.
+- **Hairlines:** 1px seams; the seek bar is 4dp tall with 2dp radius, centred in a 22dp touch strip.
 
-### Photography Geometry
-- **Hero imagery**: full-bleed, 21:9 or taller on the homepage; 16:9 on environment and shop pages. Product renders are photographic-realistic, often shot on a tinted surface that becomes the tile background.
-- **Product renders**: PNG/WebP with transparency; rest on a surface tile and pick up the system shadow.
-- **Accessory grid**: square 1:1 crops at `{rounded.lg}` (18px) radius, light neutral backgrounds, product centered with 20–40px internal padding.
-- **No rounded imagery in hero tiles** — images are full-bleed rectangular. Rounding (`{rounded.sm}`, `{rounded.lg}`) appears only on inline card imagery.
-- Lazy-loading via responsive `srcset` and `sizes` across all breakpoints; CDN-optimized WebP.
+### Named Rules
+**The Concentric Rule.** Anything sitting in the island's round end takes the pill's radius minus its inset, never a fixed radius of its own.
 
 ## Components
 
-### Top Navigation
-
-**`global-nav`** — Persistent, ultra-thin black nav bar pinned to the top of every page. Background `{colors.surface-black}`, height 44px, text `{colors.on-dark}` in `{typography.nav-link}` (12px / 400 / -0.12px tracking). Links are quiet, spaced ~20px apart, running edge-to-edge across the top. Right-aligned cluster: Search, Bag icons — always visible. On mobile, collapses to hamburger at ~834px and the Apple logo centers.
-
-**`sub-nav-frosted`** — Surface-specific nav that sticks below the global nav. Background `{colors.canvas-parchment}` at 80% opacity with backdrop-filter blur, creating a frosted-glass effect. Height 52px. Content on left: product category name ("iPhone", "Store", "Accessories") in `{typography.tagline}` (21px / 600). Content right: inline nav links in `{typography.button-utility}` (14px), ending in a persistent `{component.button-primary}` ("Buy") or a utility link.
-
 ### Buttons
+Settings has no filled buttons. Actions are rows: a group row whose trailing word is the action ("Allow", "Copy", "Open", "Try", "Reset") in bone at 15sp/600. Pressed state is the white ripple (14%) clipped to the group's corners. Disabled rows (a child setting whose parent switch is off) drop to 40% opacity.
 
-**`button-primary`** — The signature Apple action. Background `{colors.primary}` (Action Blue #0066cc), text `{colors.on-primary}` in `{typography.body}` (SF Pro Text 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
-- Active state: `{component.button-primary-active}` — `transform: scale(0.95)` (the system-wide micro-interaction).
-- Focus state: `{component.button-primary-focus}` — 2px solid `{colors.primary-focus}` outline.
+On the island:
+- **Call buttons** (an answer/decline pair): 44dp circles, green answer with a handset glyph, red decline with the hang-up glyph, 12dp apart. The answer glyph rocks like a ringing handset: a 500ms burst of up to 14° every 1.8s.
+- **Call text buttons** (any other count of actions): 44dp tall pills (22dp radius), 16dp side padding, 14sp/600, green unless the title reads as hang-up, decline, end, cancel or dismiss. They share the row and shrink when there are many, always leaving 96dp for the caller's name.
+- **Media controls:** previous, play/pause, next as white glyphs in 64 × 48dp slots, centred, with the app badge (24dp circle) at the start.
+- **Press feedback:** glyph buttons scale to 0.9 and 70% opacity in 80ms, release in 200ms; the whole pill scales to 0.97 in 90ms and back in 220ms.
 
-**`button-secondary-pill`** — Used as the second CTA when two blue pills appear together ("Learn more" / "Buy"). Background transparent, text `{colors.primary}`, 1px solid `{colors.primary}` border, rounded `{rounded.pill}`, padding 11px × 22px. Reads as a "ghost pill."
+### Chips
+- **Style chips (settings):** basalt pill, bone 15sp/500 label, 18dp × 10dp padding, at least 48dp tall (taller when a large font needs it). Tapping one plays that style on the stage (and on the real island when it is running); while it plays, the chip fills with seam and takes a 1.5dp bone outline, cleared when the demo ends. They wrap like words in a flow layout, mirrored in right-to-left layouts, and swap in place on a tab change: only the island moves.
+- **Action chips (island notification card):** up to three, sharing the row equally with 6dp gaps, 36dp tall, white text 13sp/600 on 15% white, 18dp radius. An action with only an icon shows the icon, tinted white.
 
-**`button-dark-utility`** — Global nav actions (Sign In, Bag, language selector). Background `{colors.ink}` (#1d1d1f), text `{colors.on-dark}` in `{typography.button-utility}` (14px / 400 / -0.224px tracking), rounded `{rounded.sm}` (8px), padding 8px × 15px. Active state shrinks via `transform: scale(0.95)`.
+### Cards / Containers
+- **Group:** basalt, 24dp corners, no border or shadow, rows separated by 1px seam lines inset 16dp from the start.
+- **Stage:** basalt, 28dp corners, 208dp tall; shows "Tap a style below to play it here." in pumice when the island has nothing to show (fades 150ms).
+- **Island cards** (music, incoming call, message) grow out of the pill; see the signature component below.
 
-**`button-pearl-capsule`** — Product-card secondary button. Background `{colors.surface-pearl}` (#fafafc), text `{colors.ink-muted-80}` in `{typography.caption}` (14px), 3px solid `{colors.divider-soft}` border (functions as a soft ring rather than a visible line), rounded `{rounded.md}` (11px), padding 8px × 14px.
+### Inputs / Fields
+- **Switch:** custom drawables. Track 52 × 32dp, 16dp radius, bone when on, track grey when off; thumb a 24dp ink circle inset 4dp, black on both tracks so it never sinks into the lighter off track. Label 16sp bone.
+- **Slider:** label (16sp bone) and a signed readout ("+4 dp", 15sp/500 pumice, tabular) above a framework seek bar tinted bone for progress and thumb, pumice for the track. The bar has 12dp side padding so the thumb is whole at either end, pulled out by −12dp margins so the track lines up with the labels. TalkBack reads the readout, not a percentage. "Reset" sits at 40% and does nothing while every value is already 0.
+- **Stage fitting:** drag moves x and y; pinch changes w. Values are clamped to each slider's range, and a clock-tick haptic fires when a value crosses or lands on 0 (centred on the camera) or hits either end. The centre guide turns bone when x is 0, track grey otherwise. With "Show the pill when idle" off, the stage still shows the idle pill at 40% opacity, so there is always something to drag.
 
-**`button-store-hero`** — A larger primary CTA used on store hero surfaces. Same Action Blue + Paper White as `{component.button-primary}`, but with `{typography.button-large}` (18px / 300 — note the rare weight 300) and slightly more padding (14px × 28px). Used sparingly on the store landing.
+### Navigation
+- **Segmented tabs** (Calls, Messages, Live, System): one basalt track (28dp corners, 4dp inset) holding four segments with no gaps between them, at least 48dp tall, each as wide as its label (12dp side padding) plus an equal share of the spare width, so a long label never crowds its neighbour. Selected: a bone pill (24dp radius) with an ink label. Unselected: the track shows through, pumice label. 14sp/600. Announced to TalkBack as buttons with selected state.
 
-**`button-icon-circular`** — Floats over photography. 44 × 44px, background `{colors.surface-chip-translucent}` at ~64% alpha, icon in `{colors.ink}`, rounded `{rounded.full}`. Used for carousel controls, close buttons, and in-image controls (product image thumbnails on the iPhone buy page).
+### Setup Steps
+A row with a 28dp step mark, a two-line title (16sp/500 bone) and subtitle (13sp pumice), and a trailing action. Unfinished: a 2dp pumice ring with the number inside, action in bone. Granted: a filled green circle with an ink check, action reads "On" in pumice. Once granted, the subtitle says what the step now does instead of what to do (step 3: "The island shows pop-ups instead of the system"). When step 3 is granted, the setup section also shows how to undo it before uninstalling: the command in monospace 13sp, in a group row with a "Copy" action. The status line's 8dp dot is red (off), orange (enabled but not running, or setup unfinished) or green (on).
 
-**`text-link`** — Inline body links in `{colors.primary}` (Action Blue). Underlined or non-underlined per context.
+### The Island (signature component)
+A black pill anchored to the camera, sized by two springs (width and height), whose content materialises out of the hole.
 
-**`text-link-on-dark`** — Inline body links on dark tiles in `{colors.primary-on-dark}` (Sky Link Blue #2997ff) — Action Blue would disappear against `{colors.surface-tile-1}`.
-
-### Cards & Containers
-
-**`product-tile-light`** — Full-bleed light tile. Background `{colors.canvas}` (white), text `{colors.ink}`, rounded `{rounded.none}` (0 — tiles touch edges), vertical padding `{spacing.section}` (80px). Centered stack: product name in `{typography.display-lg}` (40px / 600) → one-line tagline in `{typography.lead}` (28px / 400) → two `{component.button-primary}` CTAs ("Learn more" / "Buy") → product render resting on the surface with the system shadow.
-
-**`product-tile-parchment`** — Same as `{component.product-tile-light}` but on `{colors.canvas-parchment}` (#f5f5f7). Used to break two consecutive white tiles.
-
-**`product-tile-dark`** — Full-bleed dark tile. Background `{colors.surface-tile-1}` (#272729), text `{colors.on-dark}`, rounded `{rounded.none}`, vertical padding `{spacing.section}` (80px). Same content stack as the light tile but with `{component.text-link-on-dark}` for inline copy and `{component.button-primary}` (Action Blue still works on the dark surface). Used on the homepage product grid as the alternating dark band.
-
-**`product-tile-dark-2`** — Variant on `{colors.surface-tile-2}` (#2a2a2c). Used where a dark tile sits directly above or below `{component.product-tile-dark}` to create the faintest separation through micro-step lightness change.
-
-**`product-tile-dark-3`** — Variant on `{colors.surface-tile-3}` (#252527). Used at the bottom of the stack and in embedded video/player frames.
-
-**`store-utility-card`** — Used in store grid and accessories grid. Background `{colors.canvas}` (white), 1px solid `{colors.hairline}` border, rounded `{rounded.lg}` (18px), padding `{spacing.lg}` (24px). Top: product image (1:1 crop with `{rounded.sm}` (8px) inner image radius). Below: product name in `{typography.body-strong}` (17px / 600), price in `{typography.body}` (17px / 400), and a `{component.text-link}` ("Buy" or "Learn more"). No shadow by default; product render itself carries the system product-shadow.
-
-**`configurator-option-chip`** — Pill-shaped tappable cell used in the iPhone 17 Pro buy page. Background `{colors.canvas}`, text `{colors.ink}` in `{typography.caption}`, rounded `{rounded.pill}`, padding 12px × 16px. Contains a small product thumbnail + label + price delta. Arranged in a grid of 4–5 options per row.
-
-**`configurator-option-chip-selected`** — Selected state. Border upgrades to 2px solid `{colors.primary-focus}`. Same shape, same content.
-
-**`environment-quote-card`** — A photographic-canvas hero specific to the environment page. Dark photographic backdrop (mountain vista at dawn) with `{colors.surface-tile-1}` as the fallback color, centered white-text headline in `{typography.display-lg}` (40px), small green "Apple 2030" pictographic logo above the headline, single `{component.button-primary}` below. Padding `{spacing.section}` (80px).
-
-**`floating-sticky-bar`** — Floats at the bottom of the viewport on the iPhone 17 Pro buy page during scroll. Background `{colors.canvas-parchment}` at 80% opacity with `backdrop-filter: blur(N)`, height 64px, padding 12px × 32px. Left: running price total in `{typography.body}`. Right: `{component.button-primary}` ("Add to Bag").
-
-### Inputs & Forms
-
-**`search-input`** — The accessories search input. Background `{colors.canvas}`, text `{colors.ink}` in `{typography.body}` (17px), 1px solid `rgba(0, 0, 0, 0.08)` border, rounded `{rounded.pill}` (full pill — search is also pill-shaped, matching the CTA grammar), padding 12px × 20px, height 44px. Leading icon: search glyph at 14px, muted tint.
-
-Error and validation states were not surfaced in the analyzed pages.
-
-### Footer
-
-**`footer`** — Background `{colors.canvas-parchment}` (#f5f5f7), text `{colors.ink-muted-80}`. Link columns in `{typography.dense-link}` (17px / 400 / 2.41 line-height — the relaxed leading is what makes the dense columns scannable). Column headings in `{typography.caption-strong}` (14px / 600). Legal row at the very bottom in `{typography.fine-print}` (12px / 400) with `{colors.ink-muted-48}` text. Vertical padding 64px.
+- **Priority:** ringing call > message or system flash > call in progress > timer > navigation/flashlight > music > download progress > idle pill.
+- **Compact anatomy:** [icon + label] [camera gap] [value | ring gauge | waveform | chronometer]. The left icon is 22dp (28dp for the unlock padlock); the right value is in the item's signal colour. The ring gauge is 18dp with a stroke of 16% of its size, its track at ~27% alpha, filling from empty over 700ms (150ms delay, decelerate). The waveform is four round-capped bars in a 20 × 14dp box, bouncing while music plays, flat at 15% when paused.
+- **Music card:** 52dp art (12dp radius), title and artist, a waveform top right (level with the title, where the pill's waveform was), a seek row with times, and the controls row. Dragging down on the music pill pulls it open 1:1 with the finger; dragging up on the card closes it.
+- **Incoming call card:** a 48dp round photo with two green rings rippling out of it every 1.8s, a muted caption above the 21sp name, and the call buttons. Hidden from screen sharing.
+- **Message card:** 48dp round photo or icon, the sender (up to 2 lines) with the app name beside it, the message (up to 2 lines), then up to three action chips, on the black-to-brand gradient. Hidden from screen sharing. Flick up to dismiss.
+- **Motion:** see the sidecar for exact values. Growing is bouncy (damping 0.8, about 1.5% overshoot); shrinking is critically damped (damping 1). Growing, the pill widens first and then drops; shrinking, it pulls up first and then narrows. Content fades in while scaling from 0.9 and unblurring from 14px over 240ms; the compact halves slide outward 14dp from the camera; card rows rise 8dp one after another (40ms apart). On the way out, content fades, shrinks to 0.94 and blurs to 16px in 120ms, and the pill waits 70ms before shrinking so it never closes over visible content. A drag hands the finger's velocity to the springs. Interruptions keep the current size and velocity.
+- **Haptics:** a context click when the island grows, a long-press buzz only when there is an app to open, a confirm tick as the unlock padlock opens.
 
 ## Do's and Don'ts
 
-### Do
-- Use `{colors.primary}` (Action Blue #0066cc) for every interactive element — links, pill CTAs, focus signals — and nothing else. The single accent is non-negotiable.
-- Set headlines in `{typography.hero-display}` or `{typography.display-lg}` with negative letter-spacing (`-0.28 → -0.374px`) to get the signature "Apple tight" cadence.
-- Run body copy at `{typography.body}` (17px / 400 / 1.47 / -0.374px) — not 16px. The extra pixel defines the brand's reading pace.
-- Alternate `{component.product-tile-light}` (or parchment) and `{component.product-tile-dark}` for full-bleed section rhythm. The color change IS the divider.
-- Reserve `{rounded.pill}` for the primary blue CTA and any other element that should read as an "action" (configurator chips, search input, sticky bar CTA).
-- Apply the single product-shadow (`rgba(0, 0, 0, 0.22) 3px 5px 30px`) only to product renders resting on a surface — never on cards, buttons, or text.
-- Use `transform: scale(0.95)` as the active/press state on every button — it's the system-wide micro-interaction.
-- Keep the global nav `{colors.surface-black}` (true black) — it's the only place pure black appears on most pages.
+### Do:
+- **Do** keep the island and the settings ground at true black (#000000), and build settings structure from basalt slabs and seam hairlines only.
+- **Do** make every chip and tab a full pill at 48dp tall, and every list row at least 56dp.
+- **Do** use one meaning per signal colour: green on/done/answer/charging, orange timers and partial states, red decline and warnings, yellow flashlight, blue downloads and the notification fallback.
+- **Do** show selection and "on" in bone, with ink text or thumbs on it.
+- **Do** use tabular figures for every number that updates in place.
+- **Do** keep content in the island concentric with the pill's round end, and start card text below the camera band.
+- **Do** put new island motion on the springs (grow: responses 0.36s/0.46s, damping 0.8; shrink: 0.40s/0.30s, damping 1) and keep velocity across interruptions.
+- **Do** check the system "Remove animations" setting: springs snap, blurs are skipped, the waveform holds still and the ripple rings disappear.
+- **Do** give custom controls a TalkBack role and a state ("Calls, selected, button"; "+4 dp").
 
-### Don't
-- Don't introduce a second accent color; every "click me" signal is `{colors.primary}` (Action Blue).
-- Don't add shadows to cards, buttons, or text — shadow is reserved for product imagery.
-- Don't use gradients as decorative backgrounds; atmosphere comes from photography.
-- Don't set body copy at weight 500 — Apple's ladder is 300 / 400 / 600 / 700, with 500 deliberately absent. Body is always 400; strong inline is 600; display is 600.
-- Don't round full-bleed tiles — tiles are rectangular and edge-to-edge; the color change is the divider.
-- Don't tighten line-height below 1.47 for body copy — the editorial leading is part of the brand.
-- Don't mix radii grammars — use `{rounded.sm}` for compact utility, `{rounded.lg}` for utility cards, `{rounded.pill}` for pills, and nothing in between (except the rare `{rounded.md}` Pearl Button).
-- Don't use `{colors.primary-on-dark}` (Sky Link Blue) on light surfaces — it's the dark-tile-only variant. Action Blue is for light surfaces.
-
-## Responsive Behavior
-
-### Breakpoints
-
-| Name | Width | Key Changes |
-|---|---|---|
-| Small phone | ≤ 419px | Single-column tiles; sub-nav collapses to category name + primary CTA only; hero typography drops to 28px |
-| Phone | 420–640px | Single-column stack; product renders scale to 80% of tile width; hero h1 drops to 34px |
-| Large phone | 641–735px | Tiles transition to tighter padding (48px vertical vs 80px); fine-print wraps |
-| Tablet portrait | 736–833px | Global nav collapses to hamburger; sub-nav hides category chips, keeps primary CTA |
-| Tablet landscape | 834–1023px | Global nav returns fully expanded; 3-column utility grids become 2-column |
-| Small desktop | 1024–1068px | Product tiles use 2/3 width with margin gutters; hero h1 stays at 40px |
-| Desktop | 1069–1440px | Full layout; 4–5 column store grids; 1440px content max |
-| Wide desktop | ≥ 1441px | Content locks at 1440px, margins absorb extra width |
-
-The structural breakpoints that matter for agents: 1440px (content lock), 1068px (small-desktop), 833px (tablet landscape switch), 734px (tablet portrait), 640px (phone), 480px (small phone).
-
-### Touch Targets
-- Minimum 44 × 44px. `{component.button-primary}` lands at ~44 × 100px (with the full-pill radius making the visible hit area more generous than the label suggests).
-- `{component.button-icon-circular}` is exactly 44 × 44px.
-- Global nav utility links are smaller (~32 × 80px) — they deliberately sit at a tighter target because they're precision desktop actions, and the mobile hamburger replaces them at ≤ 833px.
-
-### Collapsing Strategy
-- **Global nav**: full horizontal link row on desktop → collapses to Apple logo + hamburger + bag icon at 834px and below.
-- **Sub-nav**: category name + inline links + primary CTA → category name + primary CTA only at mobile; inline links move into a hamburger tray.
-- **Product tiles**: stack from 2-column to 1-column at 834px; vertical padding tightens from 80px → 48px at small-phone.
-- **Utility grids** (store, accessories): 5-col → 4-col (1440px) → 3-col (1068px) → 2-col (834px) → 1-col (640px).
-- **Hero typography**: `{typography.hero-display}` (56px) → `{typography.display-lg}` (40px) at 1068px → 34px at 640px → 28px at 419px.
-
-### Image Behavior
-- All product imagery uses responsive `srcset` with breakpoint-matched crops.
-- Hero photography may switch art direction at mobile (e.g., the environment page's vista crops to a taller aspect ratio on mobile, framing the subject differently).
-- Product renders maintain their 1:1 or 4:3 aspect ratios across breakpoints; only scale changes.
-- Lazy-loading is default; the above-fold hero loads eagerly.
-
-## Iteration Guide
-
-1. Focus on ONE component at a time. Reference its YAML key directly (`{component.product-tile-dark}`, `{component.search-input}`).
-2. Variants of an existing component (`-active`, `-focus`, `-2`, `-3`) live as separate entries in `components:`.
-3. Use `{token.refs}` everywhere — never inline hex.
-4. Never document hover. Default and Active/Pressed states only.
-5. Display headlines stay SF Pro Display 600 with negative letter-spacing. Body stays SF Pro Text 400 at 17px. The boundary is unbreakable.
-6. The single drop-shadow (`rgba(0, 0, 0, 0.22) 3px 5px 30px`) is reserved for product photography only.
-7. When in doubt about emphasis: alternate surface (light → dark tile) before adding chrome.
-
-## Known Gaps
-
-- Form validation and error states were not surfaced on the analyzed pages; only the neutral search input is documented.
-- The homepage's embedded video/player frame uses `{colors.surface-black}`; interior player controls are not documented (they're a platform widget, not a web-design token).
-- Some component imagery is dynamic (rotating product hero) and its specific copy varies per surface — component specs name the structure, not the rotating content.
-- Dark-mode counterparts for store and accessories utility cards were not surfaced on the analyzed pages; the system documented is the daytime/light-dominant variant Apple ships by default.
-- Atmospheric photography (environment page mountain vista) is a content asset, not a design token; the documented `{component.environment-quote-card}` describes the structural surface only.
-- The exact backdrop-filter blur radius on `{component.sub-nav-frosted}` and `{component.floating-sticky-bar}` is platform-dependent; production CSS uses `saturate(180%) blur(20px)` as a typical baseline but the value isn't formalized as a token.
+### Don't:
+- **Don't** give the island a drop shadow, border or tint at rest; a shadow's margin becomes a dead touch zone over the app below.
+- **Don't** add shadows or elevation to settings groups, chips or the stage.
+- **Don't** colour a settings control with an accent to make it look active; green there means granted or running, nothing else.
+- **Don't** use a grey switch thumb; it sinks into the lighter off track. The thumb stays ink on both tracks.
+- **Don't** animate settings chrome with springs or long transitions; the island is the only thing that springs. Settings motion is limited to 150ms fades; chips and setup marks change in place.
+- **Don't** let a long label push the camera off-centre in the compact pill; both halves stay equal width and the text ellipsizes.
