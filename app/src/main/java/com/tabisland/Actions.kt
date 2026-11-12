@@ -22,6 +22,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 
 private const val TAG = "TabIsland"
 
@@ -106,7 +107,10 @@ class ReplyActivity : Activity() {
         try {
             a.actionIntent.send(this, 0, fillIn, null, null, null, opts.toBundle())
         } catch (e: PendingIntent.CanceledException) {
+            // the app withdrew the reply (e.g. the chat was read elsewhere): keep the text so it isn't lost silently
             Log.w(TAG, "reply intent no longer valid", e)
+            Toast.makeText(this, "Couldn't send: the app closed this reply", Toast.LENGTH_LONG).show()
+            return
         }
         finish()
     }

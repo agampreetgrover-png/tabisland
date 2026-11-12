@@ -108,7 +108,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             return super.dispatchTouchEvent(e).also { if (end) host.released() }
         }
         // steal vertical drags from the card's buttons/seek bar so the whole card can be dragged closed, and an
-        // upward flick that starts on a message card's buttons so it can still be swiped away
+        // upward flick that starts on a message or call card's buttons so it can still be swiped away
         override fun onInterceptTouchEvent(e: MotionEvent) = e.actionMasked == MotionEvent.ACTION_MOVE && (beginDrag(e) || stealFlick(e))
     }.apply { background = bg; clipToOutline = true }
 
@@ -148,6 +148,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private var seeking = false
     private var seekTo: Long? = null
     private var seekAt = 0L
+    private var seekSong: Pair<String?, String>? = null // the song seekTo was for: the next one mustn't jump to it
     private var seekAccent = 0
     private val glow = glowView()
     private val scrim = scrimView()
@@ -286,7 +287,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         seekTo?.let { t ->
             val goal = t + if (m.playing) ((now - seekAt) * m.speed).toLong() else 0L
             // until the player reports the jump, its stale position would snap the bar back
-            if (abs(pos - goal) > 1500 && now - seekAt < 2000) pos = goal else seekTo = null
+            if ((m.pkg to m.title) == seekSong && abs(pos - goal) > 1500 && now - seekAt < 2000) pos = goal else seekTo = null
         }
         if (seeking) pos = seek.progress.toLong()
         pos = pos.coerceIn(0L, max(m.duration, 0L))
@@ -331,7 +332,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
             override fun onStopTrackingTouch(s: SeekBar) {
                 seeking = false
                 val to = s.progress.toLong()
-                seekTo = to; seekAt = SystemClock.elapsedRealtime()
+                seekTo = to; seekAt = SystemClock.elapsedRealtime(); seekSong = media?.let { it.pkg to it.title }
                 host.media { it.seekTo(to) }
             }
         })
@@ -732,14 +733,19 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     /**
-     * An upward move past the slop that began on a message card's button: take the touch from the button and replay
-     * its down to the gesture detector, which never saw it, so the fling that follows dismisses the card.
+     * An upward move past the slop that began on a message or call card's button: take the touch from the button and
+     * replay its down to the gesture detector, which never saw it, so the fling that follows reaches swipeUp().
      */
     private fun stealFlick(e: MotionEvent): Boolean {
-        if (content !== notifCard) return false
+        if (content !== notifCard && content !== callCard) return false
         val dy = e.rawY - downY
-        if (dy > -slop || abs(dy) < abs(e.rawX - downX)) return false
+        // twice the slop: a thumb rolling off Answer/Reply keeps its tap, and the move below clears even the detector's
+        // widened slop for ambiguous gestures
+        if (dy >= -2 * slop || abs(dy) < abs(e.rawX - downX)) return false
+        // the real down, then this move: true timestamps give the fling its real speed (a re-timed down at the old
+        // position faked a jump), and this move, past slop, cancels an overdue long press before the looper runs it
         downEvent?.let { gestures.onTouchEvent(it) }
+        gestures.onTouchEvent(e)
         return true
     }
 
@@ -808,9 +814,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         vt?.computeCurrentVelocity(1000)
         val vy = (vt?.yVelocity ?: 0f).coerceIn(-maxFling, maxFling)
         val range = (d.toH - d.fromH).toFloat()
-        // hand the finger's speed to the springs so there's no seam between dragging and animating
-        ph.velocity = vy
-        pw.velocity = vy * (d.toW - d.fromW) / range
+        // hand the finger's speed to the springs so there's no seam between dragging and animating; capped, as a brisk
+        // flick's full speed would throw the card past the screen edges or squeeze the pill
+        val sv = vy.coerceIn(-dp(1000).toFloat(), dp(1000).toFloat())
+        ph.velocity = sv
+        pw.velocity = sv * (d.toW - d.fromW) / range
         val projected = p + vy * 0.2f / range // where a flick is heading ~200 ms on
         if (up && projected > 0.5f) {
             host.expand(d.to === mediaCard) // re-renders synchronously; swap() continues the half-revealed content
@@ -871,10 +879,13 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         val wResponse = if (bouncy) 0.36f else 0.40f
         val hResponse = if (bouncy) 0.46f else 0.30f
         val damping = if (bouncy) 0.8f else 1f // ~1.5% overshoot: alive, not wobbly
+        val wMax = max(width - 2 * abs(pill.translationX), maxW.toFloat()) // the screen's width, about the camera
         while (left > 0f) {
             val dt = min(left, 0.004f)
             pw.step(dt, wResponse, damping)
             ph.step(dt, hResponse, damping)
+            // a flick released at the end of its drag still overshoots: stop at the screen edges instead of past them
+            if (pw.value > wMax) { pw.value = wMax; pw.velocity = 0f }
             left -= dt
         }
         if (pw.settled(0.5f) && ph.settled(0.5f)) {

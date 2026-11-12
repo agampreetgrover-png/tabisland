@@ -8,7 +8,17 @@ import org.junit.Before
 import org.junit.Test
 
 class IslandTest {
-    @Before fun reset() { Island.call = null; Island.onChange = null; repeat(10) { Island.dismissFlash() } } // Island is a singleton
+    @Before fun reset() { Island.call = null; Island.onChange = null; Island.hold = false; repeat(10) { Island.dismissFlash() } } // Island is a singleton
+
+    @Test fun storedHoldAppliesToEveryCaller() {
+        // the settings preview calls top() without a hold: it must agree with the service, not release held messages
+        val t = System.currentTimeMillis()
+        Island.post(queued("a"))
+        Island.hold = true
+        assertNull(Island.top(t, on = all))
+        Island.hold = false
+        assertEquals("a", (Island.top(t, on = all) as Flash).id)
+    }
     private val now = 1_000_000L
     private val all: (String) -> Boolean = { true }
     private fun flash(until: Long = now + 3000) = Flash("notif", "Mom", "hi", until = until)
@@ -135,11 +145,22 @@ class IslandTest {
         assertTrue(f.until - (t + 10_000) in 3000L..4000L)
     }
 
+    @Test fun ringingCallDropsQueuedSystemEvents() {
+        val t = System.currentTimeMillis()
+        Island.post(queued("a")); Island.post(Flash("charge", "Charging", "80%", until = t + 60_000))
+        Island.call = call
+        Island.top(t, on = all)
+        Island.call = null
+        assertEquals("a", (Island.top(t, on = all) as Flash).id)
+        Island.dismissFlash()
+        assertNull(Island.flash) // the charge event went with the call, not 35 s late after it
+    }
+
     @Test fun lockedHoldsMessagesButShowsSystemEvents() {
         val t = System.currentTimeMillis()
         Island.post(queued("a", until = t + 4000)); Island.post(Flash("charge", "Charging", "80%", until = t + 2000))
-        assertEquals("charge", (Island.top(t, locked = true, on = all) as Flash).key)
-        assertNull(Island.top(t + 10_000, locked = true, on = all)) // long past both: the message still waits, unseen
+        assertEquals("charge", (Island.top(t, hold = true, on = all) as Flash).key)
+        assertNull(Island.top(t + 10_000, hold = true, on = all)) // long past both: the message still waits, unseen
         val f = Island.top(t + 10_000, on = all) as Flash // unlocked
         assertEquals("a", f.id)
         assertTrue(f.until - (t + 10_000) in 3000L..4000L)
@@ -148,7 +169,7 @@ class IslandTest {
     @Test fun unlockFlashGoesAheadOfWaitingMessages() {
         val t = System.currentTimeMillis()
         Island.post(queued("a")); Island.post(queued("b"))
-        Island.top(t, locked = true, on = all)
+        Island.top(t, hold = true, on = all)
         Island.post(Flash("unlock", "", "", until = t + 1800), first = true)
         assertEquals("unlock", Island.flash?.key)
         Island.dismissFlash()
@@ -159,7 +180,7 @@ class IslandTest {
         val t = System.currentTimeMillis()
         Island.post(queued("a"))
         val off = { k: String -> k != "notif" }
-        Island.top(t, locked = true, on = off)
+        Island.top(t, hold = true, on = off)
         assertNull(Island.top(t, on = off))
     }
 

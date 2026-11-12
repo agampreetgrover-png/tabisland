@@ -121,8 +121,8 @@ object Island {
     private fun changed() { onChange?.invoke(); preview?.invoke() }
     /** Cancels a notification by key; set while MediaListener is connected. */
     var cancel: ((String) -> Unit)? = null
-    /** Demo mode: the service treats every feature switch as on. */
-    var demo = false
+    /** The feature switch the running demo shows ("call", "notif", …): the service forces only it on. Null for none, or the always-on system demos. */
+    var demo: String? = null
         set(v) { field = v; changed() }
     /** A calibration slider is being touched: the service shows the idle pill even with "idle" off. */
     var calibrating = false
@@ -183,18 +183,23 @@ object Island {
         flash = n?.let { (f, ms) -> f.copy(until = now + ms) }
     }
 
-    /** [locked]: messages wait, unseen, until the keyguard is gone; system events still show. */
-    fun top(now: Long, locked: Boolean = false, on: (String) -> Boolean): Live? {
+    /** Set by the service on each render: keyguard up or the island hidden. Kept here so the settings preview agrees. */
+    var hold = false
+
+    /** [hold]: messages wait, unseen and not used up (keyguard up, or the island hidden); system events still show. */
+    fun top(now: Long, hold: Boolean = this.hold, on: (String) -> Boolean): Live? {
         if (call?.let { it.ringing && on("call") } == true) {
             // the ringing call covers every flash: park a message, unseen, at the head of the queue with its full
-            // time instead of letting it run out under the call; system events (unlock, charging) are stale by then
+            // time instead of letting it run out under the call; system events (unlock, charging) are stale by then,
+            // queued ones too, so what plays after the call never depends on what else was waiting
             flash?.let { f -> if (f.key == "notif" && f.until > now) queue.addFirst(f to flashMs); flash = null }
+            queue.removeAll { it.first.key != "notif" }
         } else {
-            // same for a message behind the keyguard: hidden for privacy, not switched off, so it mustn't be used up
-            if (locked) flash?.let { f -> if (f.key == "notif") { if (f.until > now) queue.addFirst(f to flashMs); flash = null } }
+            // same for a message behind the keyguard or while hidden: not switched off, so it mustn't be used up
+            if (hold) flash?.let { f -> if (f.key == "notif") { if (f.until > now) queue.addFirst(f to flashMs); flash = null } }
             // a flash whose switch is off is never seen: it mustn't hold back the ones queued behind it
             while (flash.let { it == null || it.until <= now || !on(it.key) }) {
-                next(now, queue.firstOrNull { !locked || it.first.key != "notif" } ?: break)
+                next(now, queue.firstOrNull { !hold || it.first.key != "notif" } ?: break)
             }
         }
         return pick(call, flash, timer, ongoing.values, media, now, on)

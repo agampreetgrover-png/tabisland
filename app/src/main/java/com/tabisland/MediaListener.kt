@@ -12,10 +12,12 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Bundle
+import android.os.Parcelable
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.text.format.DateUtils
+import android.util.Log
 
 /** Feeds Island with music (media sessions), calls, timers and notification popups. Nothing leaves the device. */
 class MediaListener : NotificationListenerService() {
@@ -40,7 +42,7 @@ class MediaListener : NotificationListenerService() {
         m.addOnActiveSessionsChangedListener(sessions, me)
         attach(best(m.getActiveSessions(me)))
         // pick up a call/timer already running; existing keys count as alerted so ONLY_ALERT_ONCE updates stay quiet
-        activeNotifications?.forEach { alerted.add(it.key); classify(it, alert = false) }
+        activeNotifications?.forEach { alerted.add(it.key); safe { classify(it, alert = false) } }
     }
 
     override fun onListenerDisconnected() {
@@ -67,7 +69,7 @@ class MediaListener : NotificationListenerService() {
         // only popups that would make a sound: respects silent channels and Do Not Disturb; suspended apps stay quiet
         val loud = rankingMap?.getRanking(sbn.key, r) == true &&
             r.importance >= NotificationManager.IMPORTANCE_DEFAULT && r.matchesInterruptionFilter() && !r.isSuspended
-        classify(sbn, loud)
+        safe { classify(sbn, loud) }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -82,7 +84,11 @@ class MediaListener : NotificationListenerService() {
     }
 
     // one call/timer slot: another running call or stopwatch may have been hidden behind the one that ended
-    private fun rescan(gone: String) { activeNotifications?.forEach { if (it.key != gone && it.isOngoing) classify(it, alert = false) } }
+    private fun rescan(gone: String) { activeNotifications?.forEach { if (it.key != gone && it.isOngoing) safe { classify(it, alert = false) } } }
+
+    /** Another app's extras can hold a class we can't unparcel (BadParcelableException): skip it, never crash the listener. */
+    private inline fun <T> safe(read: () -> T): T? =
+        try { read() } catch (e: RuntimeException) { Log.w("TabIsland", "unreadable notification", e); null }
 
     /** 0–100 for a determinate progress bar (downloads, uploads, installs), else null. */
     private fun progressOf(n: Notification): Int? {
@@ -129,8 +135,8 @@ class MediaListener : NotificationListenerService() {
                 val actions = if (!ringing) null else listOfNotNull(
                     callAction(x, Notification.EXTRA_DECLINE_INTENT, "Decline") ?: callAction(x, Notification.EXTRA_HANG_UP_INTENT, "Hang up"),
                     callAction(x, Notification.EXTRA_ANSWER_INTENT, "Answer")).ifEmpty { null }
-                // a dialing or held call must not push an incoming one out of the slot
-                if (ringing || Island.call?.ringing != true) Island.call = Call(sbn.key, title, text,
+                // a dialing or held call must not push an incoming one out of the slot; a demo's (no pkg) gives way to any real call
+                if (ringing || Island.call?.ringing != true || Island.call?.pkg == null) Island.call = Call(sbn.key, title, text,
                     largeIcon(n) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
                     pkg, n.contentIntent ?: n.fullScreenIntent, ringing)
             }
@@ -143,10 +149,15 @@ class MediaListener : NotificationListenerService() {
             progress != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", "$progress%", appIcon(pkg),
                 BLUE, progress, 1, pkg, n.contentIntent))
             else -> {
-                // same rule as Notification.suppressAlertingDueToGrouping (default ALL: summaries stay quiet, as before)
                 val summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0
-                val muted = if (summary) n.group == null || n.groupAlertBehavior != Notification.GROUP_ALERT_SUMMARY
-                    else n.group != null && n.groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY
+                // shortcut: a summary posted before its first child still pops too; apps post the child first
+                val loudChild = summary && n.group != null && activeNotifications.orEmpty().any { c -> c.key != sbn.key &&
+                    c.packageName == pkg && c.notification.group == n.group &&
+                    c.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 &&
+                    !groupMuted(n.group, false, c.notification.groupAlertBehavior) }
+                val muted = groupMuted(n.group, summary, n.groupAlertBehavior, loudChild)
+                // seeds the active ones at connect, so their unchanged re-posts after a reconnect don't pop again
+                if (!alert && !sbn.isOngoing) popped.putIfAbsent(sbn.key, signature(n, title, text))
                 if (alert && !sbn.isOngoing && !muted && (title.isNotEmpty() || text.isNotEmpty())) {
                     val first = alerted.add(sbn.key)
                     // an unchanged re-post (e.g. a read receipt or re-sort) isn't news; the same words sent again are
@@ -164,7 +175,7 @@ class MediaListener : NotificationListenerService() {
      */
     @Suppress("DEPRECATION")
     private fun signature(n: Notification, title: String, text: String): String {
-        val msgs = n.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        val msgs = safe { n.extras.getParcelableArray(Notification.EXTRA_MESSAGES) }
         val stamp = if (msgs.isNullOrEmpty()) "${n.`when`}" else "${msgs.size}/${(msgs.last() as? Bundle)?.getLong("time")}"
         return "$title\n$text\n$stamp"
     }
@@ -186,7 +197,7 @@ class MediaListener : NotificationListenerService() {
     /** A CallStyle button from its PendingIntent extra; the dialer keeps these out of [Notification.actions]. */
     @Suppress("DEPRECATION")
     private fun callAction(x: Bundle, extra: String, title: String) =
-        (x.getParcelable(extra) as? PendingIntent)?.let { Notification.Action.Builder(null as Icon?, title, it).build() }
+        safe { x.getParcelable<Parcelable>(extra) as? PendingIntent }?.let { Notification.Action.Builder(null as Icon?, title, it).build() }
 
     /** (elapsedRealtime base, countDown) from a chronometer notification or a running MetricStyle time. */
     private fun chronometer(n: Notification): Pair<Long, Boolean>? {
@@ -203,7 +214,7 @@ class MediaListener : NotificationListenerService() {
      * chronometer, no text, the time is in "android.metrics". Notification.Metric isn't in SDK 36, so read the bundle.
      */
     private fun metric(n: Notification): Bundle? =
-        n.extras.getParcelableArrayList("android.metrics", Bundle::class.java)?.firstOrNull()?.getBundle("value")
+        safe { n.extras.getParcelableArrayList("android.metrics", Bundle::class.java)?.firstOrNull()?.getBundle("value") }
 
     /** The notification's own picture (contact photo, turn arrow); null when it can't be read or decodes to nothing. */
     private fun largeIcon(n: Notification): Drawable? =
@@ -258,3 +269,10 @@ class MediaListener : NotificationListenerService() {
 /** Incoming and unanswered: CallStyle says so, or (no CallStyle) a full-screen intent, which is how calls ring; dialing has neither. */
 internal fun isRinging(callType: Int, fullScreen: Boolean) =
     callType == Notification.CallStyle.CALL_TYPE_INCOMING || callType == Notification.CallStyle.CALL_TYPE_UNKNOWN && fullScreen
+
+/**
+ * Notification.suppressAlertingDueToGrouping (a grouped summary set to CHILDREN or a grouped child set to SUMMARY stays
+ * quiet), plus a summary whose group already has a child that pops on its own: one message, one card.
+ */
+internal fun groupMuted(group: String?, summary: Boolean, behavior: Int, loudChild: Boolean = false) = group != null &&
+    (behavior == (if (summary) Notification.GROUP_ALERT_CHILDREN else Notification.GROUP_ALERT_SUMMARY) || summary && loudChild)

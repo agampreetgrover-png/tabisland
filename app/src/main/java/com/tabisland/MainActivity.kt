@@ -54,7 +54,7 @@ object Prefs {
         "What the island shows" to listOf(
             "media" to "Music",
             "peek" to "Show the song when Spotify starts",
-            "call" to "Calls",
+            "call" to "Calls (off: Android shows all pop-ups)", // Android picks a call's pop-up before the island could hand it back
             "notif" to "Notifications",
             "timer" to "Timers and stopwatch",
             "nav" to "Navigation",
@@ -260,7 +260,8 @@ class MainActivity : Activity() {
 
         col.addView(heading("Fit to your camera"))
         col.addView(text("Exact values for the preview at the top. The island moves as you drag.", 13f, PUMICE).apply { setPadding(dp(16), 0, dp(16), dp(10)) })
-        val sliders = Prefs.sliders.map { s -> sliderRow(s, prefs.getInt(s.key, 0)) { prefs.edit().putInt(s.key, it).apply() } }
+        // clamped: an old build let "w" go to -10, and a bar already at 0 never reports a reset to 0
+        val sliders = Prefs.sliders.map { s -> sliderRow(s, prefs.getInt(s.key, 0).coerceIn(s.min, s.max)) { prefs.edit().putInt(s.key, it).apply() } }
         // Reset needs no slider code: the prefs listener moves them back
         reset = actionRow("Position and size", "Reset") {
             prefs.edit().apply { Prefs.sliders.forEach { putInt(it.key, 0) } }.apply()
@@ -436,7 +437,7 @@ class MainActivity : Activity() {
         guide.translationX = (w / 2 + camX).toFloat()
         // the centre line lights up when the island is centred on the camera
         guide.setBackgroundColor(if (prefs.getInt("x", 0) == 0) BONE else TRACK)
-        readout.text = Prefs.sliders.joinToString("   ") { "${it.key} ${signed(prefs.getInt(it.key, 0))}" }
+        readout.text = Prefs.sliders.joinToString("   ") { "${it.key} ${signed(prefs.getInt(it.key, 0).coerceIn(it.min, it.max))}" }
         enable(reset, Prefs.sliders.any { prefs.getInt(it.key, 0) != 0 }) // nothing to reset at the defaults
         renderPreview()
     }
@@ -445,14 +446,14 @@ class MainActivity : Activity() {
     private fun renderPreview() {
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
-        val live = Island.top(now) { Island.demo || prefs.getBoolean(it, true) }
+        val live = Island.top(now) { it == Island.demo || prefs.getBoolean(it, true) }
         // with "Show the pill when idle" off the real island is empty at rest; the stage still shows where it would sit,
         // dimmed, so there is something to drag
         val ghost = live == null && !prefs.getBoolean("idle", true) && !Island.calibrating
         preview.show(live, live is Call && live.ringing, true, false)
         preview.alpha = if (ghost) 0.4f else 1f
         stageHint.animate().alpha(if (live == null && !Island.calibrating) 1f else 0f).setDuration(150).start()
-        if (!Island.demo) { playing?.isSelected = false; playing = null; playingStyle = null } // the demo ended: no chip is playing
+        if (Island.demo == null) { playing?.isSelected = false; playing = null; playingStyle = null } // the demo ended: no chip is playing
         expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
     }
 

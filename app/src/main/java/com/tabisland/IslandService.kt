@@ -75,10 +75,13 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private val renderLater = Runnable { render() }
     private var added = false
     private var shown: Live? = null
+    // every way the card closes cancels the 8 s auto-collapse, or an old one would cut a later card (a peek) short
     private var expanded = false
+        set(v) { field = v; if (!v) handler.removeCallbacks(collapse) }
     private var minimised: String? = null // key of the ringing call the user swiped up to the pill
     private val collapse = Runnable { if (expanded && !island.held) { expanded = false; render() } }
     private var barsVisible = true
+    private var lockedShown = false // the keyguard state the last render used
     private var battery = -1
     private var lowArmed = true
     private var dpi = 0
@@ -154,6 +157,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
 
     override fun onDestroy() {
         Island.onChange = null
+        Island.clearFlashes("notif") // a later restart mustn't show these as new
         Island.showing = false; Island.syncHeadsUp(this) // island gone: give the system banners back
         Island.removeOngoing("torch") // torch callbacks stop with us; MediaListener keeps this key, a restart re-adds it if still on
         handler.removeCallbacksAndMessages(null)
@@ -175,6 +179,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!added) return
+        // lockdown locks the keyguard with the screen on and no broadcast: the keyguard window coming up is our cue
+        if (keyguardLocked() != lockedShown) render()
         val list = windows
         if (list.isEmpty()) return // no window info: never guess fullscreen
         val sw = wm.currentWindowMetrics.bounds.width()
@@ -237,23 +243,25 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         if (!added || island.held) return
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
-        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        val on = { k: String -> Island.demo || prefs.getBoolean(k, true) }
-        // message text over the keyguard would bypass the system's "hide sensitive content" setting
-        val live = Island.top(now, locked) { on(it) && !(locked && it == "notif") }
+        val locked = keyguardLocked()
+        lockedShown = locked
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val hidden = landscape || (!barsVisible && prefs.getBoolean("fullscreen", true))
+        val on = { k: String -> k == Island.demo || prefs.getBoolean(k, true) }
+        // message text over the keyguard would bypass the system's "hide sensitive content" setting; locked or
+        // hidden, messages wait unseen instead of running out
+        Island.hold = locked || hidden
+        val live = Island.top(now) { on(it) && !(locked && it == "notif") }
         val prev = shown
         if (live == null || prev == null || live::class != prev::class) expanded = false
         if (Island.call?.let { it.ringing && it.key == minimised } != true) minimised = null
-        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val hidden = landscape || (!barsVisible && prefs.getBoolean("fullscreen", true))
         maybePeek(live, now, hidden || locked)
         shown = live
         expiry(live)?.let { handler.postDelayed(renderLater, it - now + 16) }
-        // hidden (landscape, fullscreen), locked (messages dropped above), notifications off, or a ringing call the
-        // island won't show: the system's own pop-up must show instead
+        // hidden (landscape, fullscreen), locked (messages wait above), notifications off, or calls off (Android picks a
+        // call's pop-up when it is posted, before the island could hand it back): the system's own pop-ups must show
         // the real switches, not demo mode: a demo must not take real notifications away from the system banner
-        Island.showing = !hidden && !locked && prefs.getBoolean("notif", true) &&
-            !(Island.call?.ringing == true && !prefs.getBoolean("call", true))
+        Island.showing = !hidden && !locked && prefs.getBoolean("notif", true) && prefs.getBoolean("call", true)
         Island.syncHeadsUp(this)
         val big = if (live is Call) live.ringing && live.key != minimised else expanded
         Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$big hidden=$hidden")

@@ -63,7 +63,15 @@ object Demo {
 
     fun show(ctx: Context, style: String) {
         clear()
-        Island.demo = true // the demo shows even when its own switch is off
+        // only the demo's own switch is forced on: other real items keep following theirs. System events use the
+        // always-on "preview" key; null is kept for "no demo playing"
+        Island.demo = when {
+            style.startsWith("call") || style == "incall" -> "call"
+            style.startsWith("notif") || style == "queue" || style == "alarm" -> "notif"
+            style == "download" -> "progress"
+            style == "timer" || style == "nav" || style == "torch" -> style
+            else -> "preview"
+        }
         val now = System.currentTimeMillis()
         val appIcon = ctx.packageManager.getApplicationIcon(ctx.packageName)
         when (style) {
@@ -77,8 +85,8 @@ object Demo {
                 c.drawCircle(s / 2, s * 1.0f, s * 0.36f, p)  // shoulders, cut off by the tile's edge
             })
             // after clear() only a real call/timer can be here; never overwrite it, clear() couldn't give it back
-            "incall" -> if (Island.call == null) Island.call = Call(CALL, "Mom", "", appIcon, listOf(action("Hang up")), SystemClock.elapsedRealtime() - 42_000, null, null)
-            "call-dialing" -> if (Island.call == null) Island.call = Call(CALL, "Rahul", "Calling…", letter("R", 0xFF00796B.toInt(), ctx),
+            "incall" -> if (Island.call == null) Island.call = Call(callKey(), "Mom", "", appIcon, listOf(action("Hang up")), SystemClock.elapsedRealtime() - 42_000, null, null)
+            "call-dialing" -> if (Island.call == null) Island.call = Call(callKey(), "Rahul", "Calling…", letter("R", 0xFF00796B.toInt(), ctx),
                 listOf(action("Hang up")), null, null, null, ringing = false)
             "notif" -> message(ctx, "Mom", "Are you coming home for dinner tonight? I made your favourite.", appIcon)
             // the buttons do nothing: there is no real notification behind them
@@ -130,15 +138,19 @@ object Demo {
     /** Removes whatever demo is showing; real calls, timers and live activities are left alone. */
     fun clear() {
         handler.removeCallbacksAndMessages(null)
-        if (Island.call?.key == CALL) Island.call = null
+        if (Island.call?.key?.startsWith(CALL) == true) Island.call = null
         if (Island.timer?.key == TIMER) Island.timer = null
         Island.removeFlash(FLASH)
         Island.removeFlash(FLASH2)
         Island.removeOngoing(NAV)
         Island.removeOngoing(DOWNLOAD)
         Island.removeOngoing(TORCH)
-        Island.demo = false
+        Island.demo = null
     }
+
+    // the service keeps a swiped-up call minimised by its key: a shared key would open the next demo call minimised
+    private var calls = 0
+    private fun callKey() = "$CALL-${++calls}"
 
     /** Counts 0→100% over 5 s so the ring can be seen filling. Rank 2 so it shows even while music plays. */
     private fun download(icon: Drawable, pct: Int) {
@@ -153,7 +165,7 @@ object Demo {
 
     // since = null: an incoming, ringing call. Its buttons do nothing: there is no real call behind them
     private fun call(name: String, icon: Drawable) {
-        if (Island.call == null) Island.call = Call(CALL, name, "Incoming call", icon, listOf(action("Decline"), action("Answer")), null, null, null)
+        if (Island.call == null) Island.call = Call(callKey(), name, "Incoming call", icon, listOf(action("Decline"), action("Answer")), null, null, null)
     }
 
     private fun avatar(ctx: Context, draw: (Canvas, Float) -> Unit): Drawable {
