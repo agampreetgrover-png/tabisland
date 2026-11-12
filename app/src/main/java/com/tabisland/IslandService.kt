@@ -20,15 +20,23 @@ import android.media.AudioManager
 import android.media.session.MediaController
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.WindowMetrics
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
+import android.view.accessibility.AccessibilityNodeProvider
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -37,6 +45,23 @@ import android.view.WindowManager.LayoutParams as WLP
 private const val TAG = "TabIsland"
 private const val SPOTIFY = "com.spotify.music"
 private const val BASE_FLAGS = WLP.FLAG_NOT_FOCUSABLE or WLP.FLAG_LAYOUT_IN_SCREEN or WLP.FLAG_LAYOUT_NO_LIMITS
+
+/** The front camera hole in screen pixels. Shared with the settings preview so both line up the same way. */
+fun cameraHole(m: WindowMetrics, density: Float): Rect {
+    val sw = m.bounds.width()
+    val cutout = m.windowInsets.displayCutout
+    // the cutout path is the real hole (Pixel 9a: 83 px circle); boundingRectTop runs from the screen edge down and is too tall
+    val hole = cutout?.cutoutPath?.let { p ->
+        val f = RectF()
+        @Suppress("DEPRECATION") p.computeBounds(f, true)
+        Rect().also { f.roundOut(it) }
+    }
+    fun dp(v: Int) = (v * density).roundToInt()
+    // shortcut: guessed hole when no cutout is reported (e.g. landscape, where the pill is hidden anyway)
+    return hole?.takeUnless { it.isEmpty }
+        ?: cutout?.boundingRectTop?.takeUnless { it.isEmpty }
+        ?: Rect(sw / 2 - dp(12), dp(10), sw / 2 + dp(12), dp(34))
+}
 
 /**
  * Accessibility service only because TYPE_ACCESSIBILITY_OVERLAY is the one window type that draws above the
@@ -82,8 +107,18 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         prefs =getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(this)
         island = IslandView(this, this)
-        touchView = View(this).apply {
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        touchView = object : View(this) {
+            override fun getAccessibilityNodeProvider() = a11y
+            // explore-by-touch arrives as hover: announce the island control under the finger
+            override fun dispatchHoverEvent(e: MotionEvent): Boolean {
+                val at = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) -1
+                    else a11yViews().indexOfLast { screenRect(it).contains(e.rawX.toInt(), e.rawY.toInt()) }
+                // enter before exit, as the framework orders them
+                if (at != hovered) { val old = hovered; hovered = at; a11yEvent(at, AccessibilityEvent.TYPE_VIEW_HOVER_ENTER); a11yEvent(old, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT) }
+                return at >= 0 || super.dispatchHoverEvent(e)
+            }
+        }.apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             setOnTouchListener { _, e ->
                 // a touch anywhere else closes the music card, as tapping outside a sheet would
                 if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) {
@@ -174,23 +209,16 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private fun place() {
         val m = wm.currentWindowMetrics
         val sw = m.bounds.width()
-        val cutout = m.windowInsets.displayCutout
-        // the cutout path is the real hole (Pixel 9a: 83 px circle); boundingRectTop runs from the screen edge down and is too tall
-        val hole = cutout?.cutoutPath?.let { p ->
-            val f = RectF()
-            @Suppress("DEPRECATION") p.computeBounds(f, true)
-            Rect().also { f.roundOut(it) }
-        }
-        // shortcut: guessed hole when no cutout is reported (e.g. landscape, where the pill is hidden anyway)
-        val cut = hole?.takeUnless { it.isEmpty }
-            ?: cutout?.boundingRectTop?.takeUnless { it.isEmpty }
-            ?: Rect(sw / 2 - dp(12), dp(10), sw / 2 + dp(12), dp(34))
+        val cut = cameraHole(m, resources.displayMetrics.density)
         Log.d(TAG, "camera hole=$cut")
         val pad = dp(5)
         val pillH = cut.height() + 2 * pad + dp(prefs.getInt("h", 0))
         val gapW = cut.width() + 2 * pad
-        cameraX = cut.centerX() + dp(prefs.getInt("x", 0))
-        val dx = cameraX - sw / 2
+        // cards are centred on the camera: a corner one would leave them a sliver (or a negative width), so the
+        // island moves in from it as far as needed to keep cards at least 280dp wide
+        val maxDx = ((sw - dp(16 + 280)) / 2).coerceAtLeast(0)
+        val dx = (cut.centerX() + dp(prefs.getInt("x", 0)) - sw / 2).coerceIn(-maxDx, maxDx)
+        cameraX = sw / 2 + dx
         lp.x = 0
         lp.y = cut.centerY() - pillH / 2 + dp(prefs.getInt("y", 0))
         lp.width = sw
@@ -212,7 +240,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
         val on = { k: String -> Island.demo || prefs.getBoolean(k, true) }
         // message text over the keyguard would bypass the system's "hide sensitive content" setting
-        val live = Island.top(now) { on(it) && !(locked && it == "notif") }
+        val live = Island.top(now, locked) { on(it) && !(locked && it == "notif") }
         val prev = shown
         if (live == null || prev == null || live::class != prev::class) expanded = false
         if (Island.call?.let { it.ringing && it.key == minimised } != true) minimised = null
@@ -230,6 +258,92 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         val big = if (live is Call) live.ringing && live.key != minimised else expanded
         Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$big hidden=$hidden")
         island.show(live, big, prefs.getBoolean("idle", true) || Island.calibrating, hidden)
+        touchView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) // the mirrored controls below changed
+    }
+
+    // ---- TalkBack: the drawing window is never touchable, so accessibility doesn't list it; the touch window (touchable
+    // while something shows, sized to the pill) mirrors the pill and its controls as virtual views instead ----
+
+    private var a11yFocus = -1
+    private var hovered = -1
+
+    /** What TalkBack stops on: the pill (the island's one child) and every clickable or labelled view in it, in order. */
+    private fun a11yViews(): List<View> {
+        val out = ArrayList<View>()
+        fun walk(v: View) {
+            if (!v.isShown) return
+            if (v.isClickable || !v.contentDescription.isNullOrEmpty()) out += v
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        island.getChildAt(0)?.let(::walk)
+        return out
+    }
+
+    private fun screenRect(v: View): Rect {
+        val at = IntArray(2).also(v::getLocationOnScreen)
+        return Rect(at[0], at[1], at[0] + v.width, at[1] + v.height)
+    }
+
+    private fun a11yEvent(id: Int, type: Int) {
+        val v = a11yViews().getOrNull(id) ?: return
+        if (!getSystemService(AccessibilityManager::class.java).isEnabled) return // sending would throw
+        touchView.parent?.requestSendAccessibilityEvent(touchView, AccessibilityEvent(type).apply {
+            setSource(touchView, id)
+            packageName = this@IslandService.packageName
+            className = v.accessibilityClassName
+            contentDescription = v.contentDescription
+            if (v is TextView) text.add(v.text)
+        })
+    }
+
+    private val a11y = object : AccessibilityNodeProvider() {
+        override fun createAccessibilityNodeInfo(id: Int): AccessibilityNodeInfo? {
+            val views = a11yViews()
+            if (id == AccessibilityNodeProvider.HOST_VIEW_ID) return AccessibilityNodeInfo(touchView).apply {
+                touchView.onInitializeAccessibilityNodeInfo(this)
+                views.indices.forEach { addChild(touchView, it) }
+            }
+            val v = views.getOrNull(id) ?: return null
+            return AccessibilityNodeInfo(touchView, id).apply {
+                setParent(touchView)
+                packageName = this@IslandService.packageName
+                className = v.accessibilityClassName
+                contentDescription = v.contentDescription
+                if (v is TextView) text = v.text
+                isEnabled = v.isEnabled
+                isVisibleToUser = true
+                setBoundsInScreen(screenRect(v))
+                if (v.isClickable) { isClickable = true; addAction(AccessibilityAction.ACTION_CLICK) }
+                if (v === island.getChildAt(0)) { // the pill: its long-press and swipe-up gestures
+                    isLongClickable = true
+                    addAction(AccessibilityAction.ACTION_LONG_CLICK)
+                    addAction(AccessibilityAction.ACTION_DISMISS)
+                }
+                isAccessibilityFocused = id == a11yFocus
+                addAction(if (id == a11yFocus) AccessibilityAction.ACTION_CLEAR_ACCESSIBILITY_FOCUS else AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS)
+            }
+        }
+
+        override fun performAction(id: Int, action: Int, args: Bundle?): Boolean {
+            if (id == AccessibilityNodeProvider.HOST_VIEW_ID) return touchView.performAccessibilityAction(action, args)
+            val v = a11yViews().getOrNull(id) ?: return false
+            when (action) {
+                AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS -> if (a11yFocus != id) {
+                    a11yEvent(a11yFocus, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED)
+                    a11yFocus = id
+                    a11yEvent(id, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED)
+                }
+                AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS -> if (a11yFocus == id) {
+                    a11yFocus = -1
+                    a11yEvent(id, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED)
+                }
+                AccessibilityNodeInfo.ACTION_CLICK -> return v.performClick() // the pill's click is tap()
+                AccessibilityNodeInfo.ACTION_LONG_CLICK -> if (v === island.getChildAt(0)) longPress() else return false
+                AccessibilityNodeInfo.ACTION_DISMISS -> if (v === island.getChildAt(0)) swipeUp() else return false
+                else -> return false
+            }
+            return true
+        }
     }
 
     // ---- IslandView.Host ----
@@ -273,8 +387,9 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         lastSong = song
         if (was == null) return // first look after the service starts: don't announce what was already playing
         if (was && !playing) stoppedAt = now
-        // a different song, or music back after a real break; resuming the same song after a pause isn't news
-        val started = !was && playing && (newSong || now - stoppedAt >= 60_000)
+        // a different song (also the next track while playing), or music back after a real break; resuming the same
+        // song after a pause, or a metadata refresh of it, isn't news
+        val started = playing && (newSong || !was && now - stoppedAt >= 60_000)
         if (started && !quiet && live is Media && m?.pkg == SPOTIFY && !expanded && prefs.getBoolean("peek", true)) {
             peeking = true
             expanded = true
@@ -304,7 +419,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                 if (l.autoCancel) l.id?.let { Island.cancel?.invoke(it) }
                 open(l.open); Island.dismissFlash(l)
             }
-            // the call screen shows over the keyguard: no PIN prompt while it rings
+            // the call screen shows over the keyguard, ringing or answered (as the lock screen's own call chip opens
+            // it): no PIN prompt; it can't reveal anything else, an activity that isn't show-when-locked opens behind
             is Call -> if (l.ringing && l.key == minimised) { minimised = null; render() }
                 else if (l.open?.isActivity == true) send(l.open) else open(l.open)
             is Ongoing -> if (l.key == "torch") torchOff() else open(l.open)
@@ -317,7 +433,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         stopPeek()
         val pkg = shown?.pkg ?: return
         val launch = packageManager.getLaunchIntentForPackage(pkg)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
-        if (secureLocked()) UnlockActivity.start(this, null, launch) else startActivity(launch)
+        if (keyguardLocked()) UnlockActivity.start(this, null, launch) else startActivity(launch)
         if (expanded) { expanded = false; render() }
     }
 
@@ -370,17 +486,18 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     }
 
     private fun open(pi: PendingIntent?) {
-        // locked with a PIN: ask for it first; an activity would open unseen behind the keyguard, and a
-        // broadcast/service would act without unlocking at all
+        // locked: unlock first (a PIN, or just dismissing a swipe keyguard); an activity would open unseen behind the
+        // keyguard, and a broadcast/service would act without unlocking at all
         when {
             pi == null -> {}
-            secureLocked() -> UnlockActivity.start(this, pi, null)
+            keyguardLocked() -> UnlockActivity.start(this, pi, null)
             pi.isActivity || !getSystemService(KeyguardManager::class.java).isDeviceLocked -> send(pi)
         }
         if (expanded) { expanded = false; render() }
     }
 
-    private fun secureLocked() = getSystemService(KeyguardManager::class.java).let { it.isKeyguardLocked && it.isDeviceSecure }
+    // any keyguard, secure or not: requestDismissKeyguard (UnlockActivity) dismisses a swipe one without a prompt
+    private fun keyguardLocked() = getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
     // ---- flashlight live activity: shown while the torch is on; tapping it turns the torch off ----
 
@@ -435,9 +552,10 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                         AudioManager.RINGER_MODE_NORMAL -> flash("silent", R.drawable.ic_bell, "Ring", "On", WHITE)
                     }
                 }
-                // closed lock grows out of the camera, springs open at ~0.45 s, then the pill shrinks back (~1.8 s in all)
+                // closed lock grows out of the camera, springs open at ~0.45 s, then the pill shrinks back (~1.8 s in all);
+                // ahead of the messages that waited behind the keyguard, or it would play long after the unlock
                 Intent.ACTION_USER_PRESENT -> Island.post(Flash("unlock", "", "", icon = UnlockDrawable(WHITE),
-                    until = System.currentTimeMillis() + 1800))
+                    until = System.currentTimeMillis() + 1800), first = true)
                 // message cards still up or queued at screen-off would otherwise reappear over the lock screen on wake
                 Intent.ACTION_SCREEN_OFF -> {
                     Island.clearFlashes("notif")

@@ -53,6 +53,8 @@ private const val TRACK = 0x33FFFFFF
 private const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
 private const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
 private val EASE_OUT = PathInterpolator(0.2f, 0.9f, 0.3f, 1f)
+// shortcut: English titles only (ours from MediaListener, and most dialers'); a localized lone hang-up shows green
+private val HANG_UP = Regex("""\b(decline|reject|hang|end|cancel|dismiss)""", RegexOption.IGNORE_CASE)
 
 // Pixel's system face; Typeface.create falls back to Roboto where it doesn't exist.
 private val BASE: Typeface = Typeface.create("google-sans", Typeface.NORMAL)
@@ -98,6 +100,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     // no drop shadow: its margin would make a touchable dead zone around cards where taps can't reach the app below
     private val pill: FrameLayout = object : FrameLayout(ctx) {
         override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+            // the rest of a touch letGo() already ended: its late UP must not release a second time
+            if (!held && e.actionMasked != MotionEvent.ACTION_DOWN) return false
             track(e)
             val end = e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL
             if (end) held = false // the gesture's own tap or drag release must render normally
@@ -111,7 +115,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     // ---- compact: [icon text] [camera gap] [text ring | waveform | chronometer] ----
     private val leftIcon = roundImage(dp(8))
     private val leftText = label(14f, 400)
-    private val rightText = label(14f, 600).apply { fontFeatureSettings = "tnum" }
+    private val rightText = label(14f, 600).apply { fontFeatureSettings = "tnum"; gravity = Gravity.END }
     private val ring = Ring(ctx)
     private val wave = Waveform(ctx)
     private val chrono = Chronometer(ctx).apply { textSize = 14f; typeface = font(600); fontFeatureSettings = "tnum"; maxLines = 1 }
@@ -126,7 +130,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
     private val compactRight = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
-        addView(rightText)
+        // the text takes what's left and ellipsizes, so a long one can't push the ring out of the pill
+        addView(rightText, LinearLayout.LayoutParams(0, WRAP, 1f))
         addView(ring, lp(18, 18).apply { marginStart = dp(8) })
         addView(wave, lp(20, 14))
         addView(chrono)
@@ -207,12 +212,13 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private val callButtons = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private var callSig: List<Pair<String, PendingIntent?>>? = null
     private val callGlow = glowView() // the caller's photo, blurred, like album art behind the music card
+    private val ripple = Ripple(ctx).apply { inner = dp(24).toFloat() }
     private val callRow = LinearLayout(ctx).apply {
         gravity = Gravity.CENTER_VERTICAL
         clipToPadding = false // the ripple spills into the padding
         // rings ripple out of the photo while it rings; negative margins keep the photo where it was
         addView(FrameLayout(ctx).apply {
-            addView(Ripple(ctx).apply { inner = dp(24).toFloat() }, LayoutParams(MATCH, MATCH))
+            addView(ripple, LayoutParams(MATCH, MATCH))
             addView(callIcon, LayoutParams(dp(48), dp(48), Gravity.CENTER))
         // negative margins on all sides: the rings overflow without making the row (and fit()) taller
         }, lp(72, 72).apply { marginStart = -dp(12); marginEnd = -dp(12); topMargin = -dp(10); bottomMargin = -dp(10) })
@@ -226,40 +232,35 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         addView(callRow, LayoutParams(MATCH, MATCH))
     }
 
-    // ---- notification card: [photo sender | camera | app] level with the camera, the message across the width below ----
-    private val notifIcon = roundImage(dp(16)) // circle: contact photos and Pixel's round app icons
+    // ---- notification card, below the camera: [photo | sender ··· app / message], then the actions ----
+    private val notifIcon = roundImage(dp(24)) // circle: contact photos and Pixel's round app icons
     private val notifApp = label(13f, 400).apply { setTextColor(MUTED) }
-    private val notifTitle = label(17f, 600)
-    private val notifText = label(16f, 400).apply { maxLines = 3 }
-    // a name too long for the space left of the camera gets its own full-width line instead of being cut
-    private val notifTitleLong = label(17f, 600).apply { maxLines = 2; visibility = GONE }
+    private val notifTitle = label(17f, 600).apply { maxLines = 2 } // a long name wraps instead of being cut
+    private val notifText = label(15f, 400).apply { maxLines = 2; setPadding(0, dp(2), 0, 0) }
     private var notifTint = 0
     private var notifFor: Flash? = null
     private val notifActions = LinearLayout(ctx).apply { visibility = GONE }
-    private val notifGap = Space(ctx) // the camera's width, set in geometry()
-    private val notifBand = LinearLayout(ctx).apply {
-        gravity = Gravity.CENTER_VERTICAL
-        addView(LinearLayout(ctx).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(notifIcon, lp(32, 32))
-            addView(notifTitle, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(10) })
-        }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        addView(notifGap, LinearLayout.LayoutParams(gapW, 0))
-        addView(LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.END; addView(notifApp) },
-            LinearLayout.LayoutParams(0, WRAP, 1f))
-    }
     private val notifCard = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
         // hidden from screen sharing while showing, like the system's own notifications
         if (Build.VERSION.SDK_INT >= 35) contentSensitivity = View.CONTENT_SENSITIVITY_SENSITIVE
-        addView(notifBand)
-        addView(notifTitleLong, LinearLayout.LayoutParams(MATCH, WRAP))
-        addView(notifText, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(4) })
-        addView(notifActions, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(12) })
+        addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(notifIcon, lp(48, 48))
+            addView(column(
+                LinearLayout(ctx).apply {
+                    addView(notifTitle, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    addView(notifApp, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(8) })
+                },
+                notifText,
+            ), LinearLayout.LayoutParams(0, WRAP, 1f))
+        })
+        addView(notifActions, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(10) })
     }
 
     // ---- motion state ----
     private var content: View? = null
+    private var shown: Live? = null // what the island shows; the service's longPress() opens its pkg
     private val pw = Spring(0f)
     private val ph = Spring(0f)
     private var bouncy = true
@@ -298,7 +299,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         override fun onDown(e: MotionEvent) = true
         override fun onSingleTapUp(e: MotionEvent): Boolean { host.tap(); return true }
         override fun onLongPress(e: MotionEvent) {
-            if (haptics) pill.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            // a long press opens the item's app: no buzz for one with nothing to open (charging, battery, unlock)
+            if (haptics && shown?.pkg != null) pill.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             host.longPress()
         }
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
@@ -343,9 +345,24 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         }
     }
 
+    // the screen going off or the window going away sends no UP/CANCEL: end the touch here, or renders stay held forever
+    override fun onScreenStateChanged(state: Int) { super.onScreenStateChanged(state); if (state == SCREEN_STATE_OFF) letGo() }
+    override fun onWindowVisibilityChanged(v: Int) { super.onWindowVisibilityChanged(v); if (v != VISIBLE) letGo() }
+    override fun onDetachedFromWindow() { letGo(); super.onDetachedFromWindow() }
+
+    /** Cancels a touch still in progress through the normal path: drag snap-back, seek end, press release, released(). */
+    private fun letGo() {
+        if (!held) return
+        val now = SystemClock.uptimeMillis()
+        val cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, downX, downY, 0)
+        pill.dispatchTouchEvent(cancel)
+        cancel.recycle()
+    }
+
     /** Sizes measured from the camera cutout by the service. */
     fun geometry(pillH: Int, gapW: Int, idleW: Int, maxW: Int, dx: Int) {
-        this.pillH = pillH; this.gapW = gapW; this.idleW = idleW; this.maxW = maxW
+        // a camera near the screen corner leaves little or no room (even ≤ 0): never narrower than the idle pill
+        this.pillH = pillH; this.gapW = gapW; this.idleW = idleW; this.maxW = max(maxW, idleW)
         pill.translationX = dx.toFloat() // camera centre relative to the screen centre
         gap.layoutParams = gap.layoutParams.apply { width = gapW }
         val inset = max((pillH - dp(22)) / 2, dp(6)) // keeps the icon concentric with the pill's round end
@@ -355,13 +372,11 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         // the art row rides up beside the camera: the art is clear of it, and the title (centred on the art) starts
         // just below the hole; pillH has 5dp of air under the hole
         mediaBody.setPadding(dp(16), max(dp(16), pillH - dp(10)), dp(16), dp(10))
-        // the call row is too wide to split around the camera (the name would run under it), so it starts below,
-        // taking 4 of those 5dp
-        callRow.setPadding(dp(16), max(dp(20), pillH - dp(4)), dp(16), dp(14))
-        // the sender sits level with the camera, left of it; a large font size may make the row taller
-        notifBand.minimumHeight = pillH
-        notifGap.layoutParams = notifGap.layoutParams.apply { width = gapW }
-        notifCard.setPadding(dp(16), 0, dp(16), dp(16))
+        // call and message rows are text from the top line down, which would run under the camera, so they start
+        // below it (taking 4 of those 5dp)
+        val below = max(dp(20), pillH - dp(4))
+        callRow.setPadding(dp(16), below, dp(16), dp(14))
+        notifCard.setPadding(dp(16), below, dp(16), dp(18))
     }
 
     fun show(live: Live?, expanded: Boolean, idleOn: Boolean, hidden: Boolean) {
@@ -385,6 +400,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         }
         if (drag != null) return // the finger owns the island; the release re-renders
         pill.visibility = VISIBLE
+        shown = live
         media = live as? Media
         val (v, tw, th) = bind(live, expanded, idleOn)
         if (v != null) sizeContent(v, tw, th)
@@ -393,7 +409,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         pill.contentDescription = describe(live)
         touch = live != null
         retarget(tw, th, delayStart = fadingOut)
-        wave.invalidate(); cardWave.invalidate()
+        // these stop re-drawing themselves while hidden; shown again, they need a first frame to start
+        wave.invalidate(); cardWave.invalidate(); ripple.invalidate()
         if (v === mediaCard) { removeCallbacks(ticker); post(ticker) }
     }
 
@@ -401,7 +418,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         l == null -> if (idleOn) Triple(null, idleW, pillH) else Triple(null, 0, 0)
         l is Media && expanded -> { bindMedia(l); Triple(mediaCard, maxW, fit(mediaBody, dp(148))) }
         l is Call && l.ringing && expanded -> { bindCall(l); Triple(callCard, maxW, fit(callRow, dp(52))) }
-        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(100))) }
+        l is Flash && l.key == "notif" -> { bindNotif(l); Triple(notifCard, maxW, fit(notifCard, dp(68))) }
         else -> Triple(compact, gapW + 2 * bindCompact(l), pillH)
     }
 
@@ -463,8 +480,10 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     }
 
     private fun tick(base: Long, countDown: Boolean, color: Int) {
-        chrono.base = base
+        // setBase() writes the text at once (before start(), which waits until shown), so bindCompact() can measure
+        // it; direction first, so that text already counts the right way
         chrono.isCountDown = countDown
+        chrono.base = base
         chrono.setTextColor(color)
         chrono.visibility = VISIBLE
         chrono.start()
@@ -501,7 +520,8 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         callButtons.removeAllViews()
         val pair = c.actions.size == 2 // CallStyle: decline first, answer last
         c.actions.forEachIndexed { i, a ->
-            val answer = c.actions.size > 1 && i == c.actions.lastIndex
+            // a lone button is coloured by what it does: "Answer"/"Join" green, "Decline"/"Hang up" red
+            val answer = if (c.actions.size > 1) i == c.actions.lastIndex else !HANG_UP.containsMatchIn(a.title ?: "")
             val color = if (answer) GREEN else RED
             val b: View = if (pair) {
                 // iconButton gives the same press-in feedback as the media controls
@@ -523,7 +543,7 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
                 else LinearLayout.LayoutParams(WRAP, dp(44)).apply { marginStart = dp(8) })
         }
         // many text buttons would squeeze the name to nothing: cap the row (keeping 96dp for the name) and let them share it
-        val cap = maxW - dp(32 + 48 + 16 + 96)
+        val cap = max(maxW - dp(32 + 48 + 16 + 96), 0) // negative widths are MATCH_PARENT/WRAP_CONTENT to a LayoutParams
         callButtons.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
         val squeeze = !pair && callButtons.measuredWidth > cap
         callButtons.layoutParams = LinearLayout.LayoutParams(if (squeeze) cap else WRAP, WRAP)
@@ -550,26 +570,33 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
         notifIcon.setImageDrawable(f.icon)
         notifIcon.visibility = if (f.icon != null) VISIBLE else GONE
         notifApp.text = f.pkg?.let { app(it).second } ?: ""
-        // room left of the camera: half the card minus padding and the camera, minus the 32dp photo and its 10dp gap
-        val room = (maxW - dp(32) - gapW) / 2 - dp(42)
-        val fits = notifTitle.paint.measureText(f.title) <= room
         notifTitle.text = f.title
-        notifTitle.visibility = if (fits) VISIBLE else GONE
-        notifTitleLong.text = f.title
-        notifTitleLong.visibility = if (fits) GONE else VISIBLE
         notifText.text = f.text
         if (f === notifFor) return // the same popup re-rendered: buttons and colour are already in place
         notifFor = f
         notifActions.removeAllViews()
         f.actions.take(3).forEachIndexed { i, a ->
-            notifActions.addView(label(14f, 600).apply {
-                text = a.title
+            // some apps give a button only an icon: show that, and still give TalkBack (or a missing icon) a name
+            val blank = a.title.isNullOrBlank()
+            val name = if (!blank) a.title else if (a.remoteInputs.isNullOrEmpty()) "Action ${i + 1}" else "Reply"
+            val icon = if (blank) try { a.getIcon()?.loadDrawable(context) } catch (e: Exception) { null } else null
+            val chip = if (icon != null) ImageView(context).apply {
+                setImageDrawable(icon)
+                imageTintList = ColorStateList.valueOf(WHITE)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(0, dp(9), 0, dp(9))
+                contentDescription = name
+            } else label(13f, 600).apply {
+                text = name
                 gravity = Gravity.CENTER
-                minHeight = dp(44) // design.md's minimum touch target
-                setPadding(dp(12), 0, dp(12), 0)
-                background = GradientDrawable().apply { cornerRadius = dp(22).toFloat(); setColor(0x26FFFFFF) }
-                setOnClickListener { host.action(f, a) }
-            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) marginStart = dp(8) })
+                setPadding(dp(10), 0, dp(10), 0)
+            }
+            // 36dp: compact chips, asked for smaller than design.md's 44dp touch target
+            chip.minimumHeight = dp(36)
+            chip.background = GradientDrawable().apply { cornerRadius = dp(18).toFloat(); setColor(0x26FFFFFF) }
+            chip.setOnClickListener { host.action(f, a) }
+            notifActions.addView(chip, LinearLayout.LayoutParams(0, if (icon != null) dp(36) else WRAP, 1f)
+                .apply { if (i > 0) marginStart = dp(6) })
         }
         notifActions.visibility = if (f.actions.isEmpty()) GONE else VISIBLE
         // the app's brand colour (Notification.color), else the icon's, else design.md's on-dark blue
@@ -890,7 +917,9 @@ class IslandView(ctx: Context, private val host: Host) : FrameLayout(ctx) {
     private fun tint(b: Bitmap?): Int {
         b ?: return WHITE
         if (b === tintSrc) return tintVal
-        val c = try { Bitmap.createScaledBitmap(b, 1, 1, true).getPixel(0, 0) } catch (e: RuntimeException) { return WHITE }
+        // a HARDWARE bitmap (common from MediaMetadata) scales to another one, whose pixels can't be read: copy the 1×1
+        val c = try { Bitmap.createScaledBitmap(b, 1, 1, true).copy(Bitmap.Config.ARGB_8888, false).getPixel(0, 0) }
+            catch (e: RuntimeException) { return WHITE }
         val hsv = FloatArray(3).also { Color.colorToHSV(c, it) }
         hsv[2] = max(hsv[2], 0.9f)
         tintSrc = b

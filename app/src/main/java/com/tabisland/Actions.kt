@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -52,8 +53,14 @@ class ReplyActivity : Activity() {
             setPadding(px(16), px(12), px(16), px(12))
             maxLines = 4
             imeOptions = EditorInfo.IME_ACTION_SEND
-            setRawInputType(EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_FLAG_CAP_SENTENCES or EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE)
-            setOnEditorActionListener { _, _, _ -> send(a, text); true }
+            // no MULTI_LINE: it makes TextView add IME_FLAG_NO_ENTER_ACTION, so the keyboard shows Enter, not Send;
+            // the box still wraps (it isn't singleLine) up to maxLines
+            setRawInputType(EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_FLAG_CAP_SENTENCES)
+            // an Enter key event reaches the listener on both down and up: send once, on down
+            setOnEditorActionListener { _, id, e ->
+                if (id == EditorInfo.IME_ACTION_SEND || e?.action == KeyEvent.ACTION_DOWN) send(a, text)
+                true
+            }
         }
         val sendBtn = TextView(this).apply {
             text = "Send"; textSize = 15f; setTextColor(BASALT); typeface = Typeface.create(Typeface.DEFAULT, 600, false)
@@ -88,8 +95,16 @@ class ReplyActivity : Activity() {
         val inputs = a.remoteInputs ?: return finish()
         val fillIn = Intent()
         RemoteInput.addResultsToIntent(inputs, fillIn, Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } })
+        // Android 14+ blocks an activity start from the sent intent unless the sender opts in (as IslandService.send)
+        val opts = ActivityOptions.makeBasic()
+        if (Build.VERSION.SDK_INT >= 36) {
+            opts.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+        } else if (Build.VERSION.SDK_INT >= 34) {
+            @Suppress("DEPRECATION")
+            opts.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+        }
         try {
-            a.actionIntent.send(this, 0, fillIn)
+            a.actionIntent.send(this, 0, fillIn, null, null, null, opts.toBundle())
         } catch (e: PendingIntent.CanceledException) {
             Log.w(TAG, "reply intent no longer valid", e)
         }

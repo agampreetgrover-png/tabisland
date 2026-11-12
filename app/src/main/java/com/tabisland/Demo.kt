@@ -18,21 +18,37 @@ import android.os.SystemClock
  * without waiting for a real call, timer or navigation. Demo items use their own keys and never touch real ones.
  */
 object Demo {
-    /** (style, button label) for the settings screen. */
-    val styles = listOf(
-        "call-photo" to "Call: photo",
-        "call-letter" to "Call: name only",
-        "call-unknown" to "Call: unknown",
-        "incall" to "Call in progress",
-        "notif" to "Message",
-        "timer" to "Timer",
-        "nav" to "Navigation",
-        "download" to "Download",
-        "torch" to "Flashlight",
-        "charge" to "Charging",
-        "battery" to "Low battery",
-        "silent" to "Silent mode",
-        "unlock" to "Unlock",
+    /** The settings screen's demo tabs: (tab, [(style, chip label)]). */
+    val groups = listOf(
+        "Calls" to listOf(
+            "call-photo" to "Photo",
+            "call-letter" to "Name only",
+            "call-unknown" to "Unknown number",
+            "incall" to "In progress",
+            "call-dialing" to "Calling out",
+        ),
+        "Messages" to listOf(
+            "notif" to "Message",
+            "notif-buttons" to "With buttons",
+            "notif-long" to "Long name",
+            "notif-short" to "One line",
+            "notif-color" to "App colour",
+            "notif-noicon" to "No photo",
+            "queue" to "Two in a row",
+            "alarm" to "Alarm",
+        ),
+        "Live" to listOf(
+            "timer" to "Timer",
+            "nav" to "Navigation",
+            "download" to "Download",
+            "torch" to "Flashlight",
+        ),
+        "System" to listOf(
+            "charge" to "Charging",
+            "battery" to "Low battery",
+            "silent" to "Silent mode",
+            "unlock" to "Unlock",
+        ),
     )
 
     private const val SHOW_MS = 6000L
@@ -42,6 +58,7 @@ object Demo {
     private const val DOWNLOAD = "demo-download"
     private const val TORCH = "demo-torch"
     private const val FLASH = "demo-flash"
+    private const val FLASH2 = "demo-flash-2"
     private val handler = Handler(Looper.getMainLooper())
 
     fun show(ctx: Context, style: String) {
@@ -52,13 +69,7 @@ object Demo {
         when (style) {
             // the three avatars a real call can bring: a contact photo, the dialer's letter tile, the unknown-caller silhouette
             "call-photo" -> call("Ananya", ctx.getDrawable(R.drawable.demo_caller)!!) // stock photo (Unsplash license)
-            "call-letter" -> call("Rahul", avatar(ctx) { c, s ->
-                c.drawColor(0xFF00796B.toInt())
-                val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = WHITE; textSize = s * 0.5f; textAlign = Paint.Align.CENTER; typeface = Typeface.create("google-sans", Typeface.NORMAL)
-                }
-                c.drawText("R", s / 2, s / 2 - (p.descent() + p.ascent()) / 2, p)
-            })
+            "call-letter" -> call("Rahul", letter("R", 0xFF00796B.toInt(), ctx))
             "call-unknown" -> call("+91 98765 43210", avatar(ctx) { c, s ->
                 c.drawColor(0xFF5F6368.toInt())
                 val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFDADCE0.toInt() }
@@ -67,8 +78,28 @@ object Demo {
             })
             // after clear() only a real call/timer can be here; never overwrite it, clear() couldn't give it back
             "incall" -> if (Island.call == null) Island.call = Call(CALL, "Mom", "", appIcon, listOf(action("Hang up")), SystemClock.elapsedRealtime() - 42_000, null, null)
-            "notif" -> Island.post(Flash("notif", "Mom", "Are you coming home for dinner tonight? I made your favourite.",
-                appIcon, pkg = ctx.packageName, id = FLASH, until = now + SHOW_MS))
+            "call-dialing" -> if (Island.call == null) Island.call = Call(CALL, "Rahul", "Calling…", letter("R", 0xFF00796B.toInt(), ctx),
+                listOf(action("Hang up")), null, null, null, ringing = false)
+            "notif" -> message(ctx, "Mom", "Are you coming home for dinner tonight? I made your favourite.", appIcon)
+            // the buttons do nothing: there is no real notification behind them
+            "notif-buttons" -> message(ctx, "Naruna", "ya Bhuj station ki trains dekho", letter("N", 0xFF7B1FA2.toInt(), ctx),
+                actions = listOf(action("Reply"), action("Mark as read"), action("Mute")))
+            // too long for one line, and a message too long for two: both must wrap or end in "…", never overflow
+            "notif-long" -> message(ctx, "Future flatties: Naruna Sharma and 6 others",
+                "Okay so the plan is we meet at the station at 6, take the 6:40 train, and anyone who is late is buying " +
+                    "dinner for everyone. No excuses this time, I mean it.", letter("F", 0xFF1565C0.toInt(), ctx))
+            "notif-short" -> message(ctx, "Rahul", "ok 👍", letter("R", 0xFF00796B.toInt(), ctx))
+            // a brand colour from the app (Notification.color), as WhatsApp sets: the card fades into green
+            "notif-color" -> message(ctx, "Ananya", "Reached home safe", ctx.getDrawable(R.drawable.demo_caller)!!, accent = 0xFF25D366.toInt())
+            // no photo and no colour: the card falls back to blue
+            "notif-noicon" -> message(ctx, "Bank", "Your OTP is 482913. Do not share it with anyone.", null)
+            // the second waits for the first instead of replacing it
+            "queue" -> {
+                message(ctx, "Mom", "Where are you?", appIcon, ms = 3500)
+                message(ctx, "Rahul", "Bro come online", letter("R", 0xFF00796B.toInt(), ctx), id = FLASH2, ms = 3500)
+            }
+            "alarm" -> message(ctx, "Alarm", "7:00 AM · Wake up", ctx.tinted(R.drawable.ic_bell, ORANGE), accent = ORANGE,
+                actions = listOf(action("Snooze"), action("Stop")))
             "timer" -> if (Island.timer == null) Island.timer = Timer(TIMER, "Timer", ctx.tinted(R.drawable.ic_timer, ORANGE),
                 SystemClock.elapsedRealtime() + 5 * 60_000, true, null, null)
             "nav" -> Island.putOngoing(Ongoing(NAV, "nav", "200 m", "", ctx.tinted(R.drawable.ic_turn_right, WHITE), WHITE, null, 3, null, null))
@@ -79,7 +110,21 @@ object Demo {
             "silent" -> flash(ctx, R.drawable.ic_bell_off, "Silent", "On", RED, null)
             "unlock" -> Island.post(Flash("preview", "", "", icon = UnlockDrawable(WHITE), id = FLASH, until = now + 1800))
         }
-        handler.postDelayed({ clear() }, SHOW_MS)
+        handler.postDelayed({ clear() }, if (style == "queue") 2 * SHOW_MS else SHOW_MS)
+    }
+
+    private fun message(ctx: Context, title: String, text: String, icon: Drawable?, accent: Int = WHITE,
+                        actions: List<Notification.Action> = emptyList(), id: String = FLASH, ms: Long = SHOW_MS) =
+        Island.post(Flash("notif", title, text, icon, accent = accent, pkg = ctx.packageName, id = id,
+            until = System.currentTimeMillis() + ms, actions = actions))
+
+    /** A contact's letter tile, like the dialer draws for people without a photo. */
+    private fun letter(ch: String, bg: Int, ctx: Context) = avatar(ctx) { c, s ->
+        c.drawColor(bg)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = WHITE; textSize = s * 0.5f; textAlign = Paint.Align.CENTER; typeface = Typeface.create("google-sans", Typeface.NORMAL)
+        }
+        c.drawText(ch, s / 2, s / 2 - (p.descent() + p.ascent()) / 2, p)
     }
 
     /** Removes whatever demo is showing; real calls, timers and live activities are left alone. */
@@ -88,6 +133,7 @@ object Demo {
         if (Island.call?.key == CALL) Island.call = null
         if (Island.timer?.key == TIMER) Island.timer = null
         Island.removeFlash(FLASH)
+        Island.removeFlash(FLASH2)
         Island.removeOngoing(NAV)
         Island.removeOngoing(DOWNLOAD)
         Island.removeOngoing(TORCH)

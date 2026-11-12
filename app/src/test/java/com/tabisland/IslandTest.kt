@@ -105,12 +105,12 @@ class IslandTest {
     @Test fun topAdvancesPastAnExpiredFlash() {
         val t = System.currentTimeMillis()
         Island.post(queued("a", until = t + 60_000)); Island.post(queued("b", until = t + 60_000))
-        assertEquals("b", (Island.top(t + 60_001, all) as Flash).id)
+        assertEquals("b", (Island.top(t + 60_001, on = all) as Flash).id)
     }
 
     @Test fun switchedOffFlashDoesNotHoldTheQueue() {
         Island.post(Flash("silent", "Silent", "On", until = System.currentTimeMillis() + 60_000)); Island.post(queued("a"))
-        assertEquals("a", (Island.top(System.currentTimeMillis(), { it != "silent" }) as Flash).id)
+        assertEquals("a", (Island.top(System.currentTimeMillis(), on = { it != "silent" }) as Flash).id)
     }
 
     @Test fun queuingBehindALiveFlashStillRenders() {
@@ -126,13 +126,41 @@ class IslandTest {
         val t = System.currentTimeMillis()
         Island.call = call
         Island.post(queued("a", until = t + 4000))
-        assertSame(call, Island.top(t, all))
+        assertSame(call, Island.top(t, on = all))
         assertNull(Island.flash)
-        assertSame(call, Island.top(t + 10_000, all)) // long past its 4 s: still waiting, unseen
+        assertSame(call, Island.top(t + 10_000, on = all)) // long past its 4 s: still waiting, unseen
         Island.call = null
-        val f = Island.top(t + 10_000, all) as Flash
+        val f = Island.top(t + 10_000, on = all) as Flash
         assertEquals("a", f.id)
         assertTrue(f.until - (t + 10_000) in 3000L..4000L)
+    }
+
+    @Test fun lockedHoldsMessagesButShowsSystemEvents() {
+        val t = System.currentTimeMillis()
+        Island.post(queued("a", until = t + 4000)); Island.post(Flash("charge", "Charging", "80%", until = t + 2000))
+        assertEquals("charge", (Island.top(t, locked = true, on = all) as Flash).key)
+        assertNull(Island.top(t + 10_000, locked = true, on = all)) // long past both: the message still waits, unseen
+        val f = Island.top(t + 10_000, on = all) as Flash // unlocked
+        assertEquals("a", f.id)
+        assertTrue(f.until - (t + 10_000) in 3000L..4000L)
+    }
+
+    @Test fun unlockFlashGoesAheadOfWaitingMessages() {
+        val t = System.currentTimeMillis()
+        Island.post(queued("a")); Island.post(queued("b"))
+        Island.top(t, locked = true, on = all)
+        Island.post(Flash("unlock", "", "", until = t + 1800), first = true)
+        assertEquals("unlock", Island.flash?.key)
+        Island.dismissFlash()
+        assertEquals("a", Island.flash?.id)
+    }
+
+    @Test fun switchedOffMessageIsStillSkippedAfterUnlock() {
+        val t = System.currentTimeMillis()
+        Island.post(queued("a"))
+        val off = { k: String -> k != "notif" }
+        Island.top(t, locked = true, on = off)
+        assertNull(Island.top(t, on = off))
     }
 
     @Test fun dismissingAStaleCardLeavesTheNextOne() {

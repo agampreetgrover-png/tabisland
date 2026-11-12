@@ -23,6 +23,7 @@ class UnlockDrawable(color: Int) : Drawable() {
     private var pop = 1f
     private var started = false
     private var opened = false
+    private var anims = emptyList<ValueAnimator>()
     private val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
     private val shackle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color
@@ -68,23 +69,30 @@ class UnlockDrawable(color: Int) : Drawable() {
     }
 
     private fun play() {
-        ValueAnimator.ofFloat(0f, 1f).apply {
-            startDelay = 450 // the pill has grown and the closed lock has clearly registered
-            duration = 480
-            interpolator = OvershootInterpolator(2.4f)
-            addUpdateListener {
-                open = it.animatedValue as Float
-                if (!opened && it.animatedFraction > 0f) { opened = true; onOpen?.invoke() }
-                invalidateSelf()
-            }
-            start()
-        }
-        ValueAnimator.ofFloat(1f, 1.18f, 1f).apply {
-            startDelay = 450
-            duration = 400
-            addUpdateListener { pop = it.animatedValue as Float; invalidateSelf() }
-            start()
-        }
+        anims = listOf(
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                startDelay = 450 // the pill has grown and the closed lock has clearly registered
+                duration = 480
+                interpolator = OvershootInterpolator(2.4f)
+                addUpdateListener {
+                    open = it.animatedValue as Float
+                    if (!opened && it.animatedFraction > 0f) { opened = true; onOpen?.invoke() }
+                    invalidateSelf()
+                }
+            },
+            ValueAnimator.ofFloat(1f, 1.18f, 1f).apply {
+                startDelay = 450
+                duration = 400
+                addUpdateListener { pop = it.animatedValue as Float; invalidateSelf() }
+            },
+        ).onEach { it.start() }
+    }
+
+    // ImageView hides the drawable it replaces or detaches: stop (no late haptic tick), and replay from closed if
+    // it's ever drawn again rather than freezing half-open
+    override fun setVisible(visible: Boolean, restart: Boolean): Boolean {
+        if (!visible) { anims.forEach { it.cancel() }; started = false; opened = false; open = 0f; pop = 1f }
+        return super.setVisible(visible, restart)
     }
 
     override fun setAlpha(alpha: Int) { body.alpha = alpha; shackle.alpha = alpha }

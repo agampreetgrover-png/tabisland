@@ -56,9 +56,9 @@ class MediaListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
-        // a crash or unbind can skip onListenerDisconnected; never leave the system banners off
-        Island.listening = false; Island.syncHeadsUp(this)
-        Island.cancel = null
+        // a crash or unbind can skip onListenerDisconnected: never leave the system banners off, or the session
+        // listener and controller callback (which hold this service) registered; safe to run twice
+        onListenerDisconnected()
         super.onDestroy()
     }
 
@@ -125,20 +125,20 @@ class MediaListener : NotificationListenerService() {
         }
         when {
             n.category == Notification.CATEGORY_CALL && sbn.isOngoing -> {
-                val ringing = chrono == null && x.getInt(Notification.EXTRA_CALL_TYPE) != Notification.CallStyle.CALL_TYPE_ONGOING
+                val ringing = chrono == null && isRinging(x.getInt(Notification.EXTRA_CALL_TYPE), n.fullScreenIntent != null)
                 val actions = if (!ringing) null else listOfNotNull(
                     callAction(x, Notification.EXTRA_DECLINE_INTENT, "Decline") ?: callAction(x, Notification.EXTRA_HANG_UP_INTENT, "Hang up"),
                     callAction(x, Notification.EXTRA_ANSWER_INTENT, "Answer")).ifEmpty { null }
                 // a dialing or held call must not push an incoming one out of the slot
                 if (ringing || Island.call?.ringing != true) Island.call = Call(sbn.key, title, text,
-                    n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
+                    largeIcon(n) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
                     pkg, n.contentIntent ?: n.fullScreenIntent, ringing)
             }
             sbn.isOngoing && (chrono != null || paused != null) -> Island.timer = Timer(sbn.key,
                 paused?.let { "Paused " + DateUtils.formatElapsedTime(it / 1000) } ?: title.ifEmpty { text },
                 appIcon(pkg), chrono?.first, chrono?.second ?: false, pkg, n.contentIntent)
             // Google Maps: title is the distance to the next turn, large icon the turn arrow
-            nav -> Island.putOngoing(Ongoing(sbn.key, "nav", title, "", n.getLargeIcon()?.loadDrawable(this) ?: appIcon(pkg),
+            nav -> Island.putOngoing(Ongoing(sbn.key, "nav", title, "", largeIcon(n) ?: appIcon(pkg),
                 WHITE, null, 3, pkg, n.contentIntent))
             progress != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", "$progress%", appIcon(pkg),
                 BLUE, progress, 1, pkg, n.contentIntent))
@@ -177,7 +177,7 @@ class MediaListener : NotificationListenerService() {
         val n = sbn.notification
         popped[sbn.key] = signature(n, title, text)
         if (!Island.showing) return // the system banner shows it; posting would show it a second time later
-        Island.post(Flash("notif", title, text, n.getLargeIcon()?.loadDrawable(this) ?: appIcon(sbn.packageName),
+        Island.post(Flash("notif", title, text, largeIcon(n) ?: appIcon(sbn.packageName),
             accent = n.color, pkg = sbn.packageName, open = n.contentIntent ?: n.fullScreenIntent, id = sbn.key,
             until = System.currentTimeMillis() + ms, actions = n.actions?.take(3).orEmpty(),
             autoCancel = n.flags and Notification.FLAG_AUTO_CANCEL != 0))
@@ -204,6 +204,10 @@ class MediaListener : NotificationListenerService() {
      */
     private fun metric(n: Notification): Bundle? =
         n.extras.getParcelableArrayList("android.metrics", Bundle::class.java)?.firstOrNull()?.getBundle("value")
+
+    /** The notification's own picture (contact photo, turn arrow); null when it can't be read or decodes to nothing. */
+    private fun largeIcon(n: Notification): Drawable? =
+        try { n.getLargeIcon()?.loadDrawable(this)?.takeIf { it.intrinsicWidth > 0 } } catch (e: Exception) { null }
 
     private fun appIcon(pkg: String): Drawable? =
         try { packageManager.getApplicationIcon(pkg) } catch (e: PackageManager.NameNotFoundException) { null }
@@ -234,16 +238,23 @@ class MediaListener : NotificationListenerService() {
         Island.media = Media(
             title = m.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(),
             artist = (m.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: m.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)).orEmpty(),
-            art = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART),
+            // shortcut: *_ART_URI isn't loaded (main thread, no INTERNET, other apps' content:// needs a grant); load it off-thread if players without bitmaps matter
+            art = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART) ?: m.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: m.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON),
             playing = playing,
             // paused sessions linger 5 min after playback stops; one found paused at startup stays hidden
             lastPlayed = if (playing || prev?.playing == true) now else prev?.lastPlayed ?: 0L,
             duration = m.getLong(MediaMetadata.METADATA_KEY_DURATION),
             position = s?.position ?: 0L,
-            positionAt = s?.lastPositionUpdateTime ?: SystemClock.elapsedRealtime(),
+            // 0 means the player never stamped its position: extrapolating from boot would run the bar to the end
+            positionAt = s?.lastPositionUpdateTime?.takeIf { it > 0 } ?: SystemClock.elapsedRealtime(),
             speed = s?.playbackSpeed ?: 1f,
             pkg = c.packageName,
             open = c.sessionActivity,
         )
     }
 }
+
+/** Incoming and unanswered: CallStyle says so, or (no CallStyle) a full-screen intent, which is how calls ring; dialing has neither. */
+internal fun isRinging(callType: Int, fullScreen: Boolean) =
+    callType == Notification.CallStyle.CALL_TYPE_INCOMING || callType == Notification.CallStyle.CALL_TYPE_UNKNOWN && fullScreen
