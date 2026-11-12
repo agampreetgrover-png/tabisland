@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-13T00:00:00Z",
+  "title": "Design System: Tab Island",
+  "extensions": {
+    "units": "Native Android. px in tokens and snippets = dp for lengths, sp for text. Alpha colours are #RRGGBBAA here; Kotlin writes 0xAARRGGBB.",
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#000000",
+        "source": "MainActivity.kt INK; IslandView.kt Color.BLACK",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(48% 0 0)",
+          "oklch(60% 0 0)",
+          "oklch(72% 0 0)",
+          "oklch(84% 0 0)",
+          "oklch(95% 0 0)"
+        ]
+      },
+      "basalt": {
+        "role": "neutral",
+        "displayName": "Basalt",
+        "canonical": "#161618",
+        "source": "MainActivity.kt BASALT",
+        "tonalRamp": [
+          "oklch(15% 0.002 286)",
+          "oklch(25% 0.003 286)",
+          "oklch(35% 0.004 286)",
+          "oklch(48% 0.004 286)",
+          "oklch(60% 0.004 286)",
+          "oklch(72% 0.003 286)",
+          "oklch(84% 0.002 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "seam": {
+        "role": "neutral",
+        "displayName": "Seam",
+        "canonical": "#2A2A2E",
+        "source": "MainActivity.kt SEAM",
+        "tonalRamp": [
+          "oklch(15% 0.004 286)",
+          "oklch(25% 0.006 286)",
+          "oklch(35% 0.007 286)",
+          "oklch(48% 0.007 286)",
+          "oklch(60% 0.007 286)",
+          "oklch(72% 0.006 286)",
+          "oklch(84% 0.004 286)",
+          "oklch(95% 0.002 286)"
+        ]
+      },
+      "track-grey": {
+        "role": "neutral",
+        "displayName": "Track Grey",
+        "canonical": "#6E6E76",
+        "source": "MainActivity.kt TRACK (not IslandView.kt TRACK, which is island-track)",
+        "tonalRamp": [
+          "oklch(15% 0.007 286)",
+          "oklch(25% 0.010 286)",
+          "oklch(35% 0.012 286)",
+          "oklch(48% 0.012 286)",
+          "oklch(60% 0.012 286)",
+          "oklch(72% 0.011 286)",
+          "oklch(84% 0.007 286)",
+          "oklch(95% 0.003 286)"
+        ]
+      },
+      "pumice": {
+        "role": "neutral",
+        "displayName": "Pumice",
+        "canonical": "#9E9EA6",
+        "source": "MainActivity.kt PUMICE",
+        "tonalRamp": [
+          "oklch(15% 0.006 286)",
+          "oklch(25% 0.010 286)",
+          "oklch(35% 0.012 286)",
+          "oklch(48% 0.012 286)",
+          "oklch(60% 0.012 286)",
+          "oklch(72% 0.010 286)",
+          "oklch(84% 0.007 286)",
+          "oklch(95% 0.002 286)"
+        ]
+      },
+      "bone": {
+        "role": "primary",
+        "displayName": "Bone",
+        "canonical": "#F4F4F1",
+        "source": "MainActivity.kt BONE",
+        "tonalRamp": [
+          "oklch(15% 0.002 106)",
+          "oklch(25% 0.003 106)",
+          "oklch(35% 0.004 106)",
+          "oklch(48% 0.004 106)",
+          "oklch(60% 0.004 106)",
+          "oklch(72% 0.004 106)",
+          "oklch(84% 0.002 106)",
+          "oklch(95% 0.001 106)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#FFFFFF",
+        "source": "Island.kt WHITE"
+      },
+      "art-tile": {
+        "role": "neutral",
+        "displayName": "Art Tile",
+        "canonical": "#2C2C2E",
+        "source": "IslandView.kt roundImage() placeholder",
+        "tonalRamp": [
+          "oklch(15% 0.002 286)",
+          "oklch(25% 0.003 286)",
+          "oklch(35% 0.004 286)",
+          "oklch(48% 0.004 286)",
+          "oklch(60% 0.004 286)",
+          "oklch(72% 0.003 286)",
+          "oklch(84% 0.002 286)",
+          "oklch(95% 0.001 286)"
+        ]
+      },
+      "muted-white": {
+        "role": "neutral",
+        "displayName": "Muted White",
+        "canonical": "rgba(255,255,255,0.70)",
+        "source": "IslandView.kt MUTED 0xB3FFFFFF"
+      },
+      "island-track": {
+        "role": "neutral",
+        "displayName": "Island Track",
+        "canonical": "rgba(255,255,255,0.20)",
+        "source": "IslandView.kt TRACK 0x33FFFFFF"
+      },
+      "action-fill": {
+        "role": "neutral",
+        "displayName": "Action Fill",
+        "canonical": "rgba(255,255,255,0.15)",
+        "source": "IslandView.kt bindNotif() 0x26FFFFFF"
+      },
+      "press-ripple": {
+        "role": "neutral",
+        "displayName": "Press Ripple",
+        "canonical": "rgba(255,255,255,0.14)",
+        "source": "MainActivity.kt ripple() 0x24FFFFFF"
+      },
+      "signal-green": {
+        "role": "secondary",
+        "displayName": "Signal Green",
+        "canonical": "#30D158",
+        "source": "Island.kt GREEN",
+        "tonalRamp": [
+          "oklch(15% 0.117 147)",
+          "oklch(25% 0.172 147)",
+          "oklch(35% 0.208 147)",
+          "oklch(48% 0.208 147)",
+          "oklch(60% 0.208 147)",
+          "oklch(72% 0.185 147)",
+          "oklch(84% 0.123 147)",
+          "oklch(95% 0.044 147)"
+        ]
+      },
+      "signal-orange": {
+        "role": "secondary",
+        "displayName": "Signal Orange",
+        "canonical": "#FF9F0A",
+        "source": "Island.kt ORANGE",
+        "tonalRamp": [
+          "oklch(15% 0.096 67)",
+          "oklch(25% 0.141 67)",
+          "oklch(35% 0.171 67)",
+          "oklch(48% 0.171 67)",
+          "oklch(60% 0.171 67)",
+          "oklch(72% 0.152 67)",
+          "oklch(84% 0.101 67)",
+          "oklch(95% 0.036 67)"
+        ]
+      },
+      "signal-red": {
+        "role": "secondary",
+        "displayName": "Signal Red",
+        "canonical": "#FF453A",
+        "source": "Island.kt RED",
+        "tonalRamp": [
+          "oklch(15% 0.125 28)",
+          "oklch(25% 0.184 28)",
+          "oklch(35% 0.224 28)",
+          "oklch(48% 0.224 28)",
+          "oklch(60% 0.224 28)",
+          "oklch(72% 0.198 28)",
+          "oklch(84% 0.132 28)",
+          "oklch(95% 0.047 28)"
+        ]
+      },
+      "signal-blue": {
+        "role": "secondary",
+        "displayName": "Signal Blue",
+        "canonical": "#2997FF",
+        "source": "Island.kt BLUE",
+        "tonalRamp": [
+          "oklch(15% 0.101 252)",
+          "oklch(25% 0.149 252)",
+          "oklch(35% 0.181 252)",
+          "oklch(48% 0.181 252)",
+          "oklch(60% 0.181 252)",
+          "oklch(72% 0.160 252)",
+          "oklch(84% 0.107 252)",
+          "oklch(95% 0.038 252)"
+        ]
+      },
+      "signal-yellow": {
+        "role": "secondary",
+        "displayName": "Signal Yellow",
+        "canonical": "#FFD60A",
+        "source": "Island.kt YELLOW",
+        "tonalRamp": [
+          "oklch(15% 0.101 95)",
+          "oklch(25% 0.149 95)",
+          "oklch(35% 0.181 95)",
+          "oklch(48% 0.181 95)",
+          "oklch(60% 0.181 95)",
+          "oklch(72% 0.160 95)",
+          "oklch(84% 0.107 95)",
+          "oklch(95% 0.038 95)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The settings title only. Typeface.DEFAULT at weight 600."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Settings section headings; accessibility headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Switch and row labels (step titles at 500)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The status line."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Chips and slider readouts at 500; row actions at 600."
+      },
+      "segment": {
+        "displayName": "Segment",
+        "purpose": "Tab labels."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Pumice hints and explanations."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "The stage's x/y/w/h readout, tabular figures."
+      },
+      "island-name": {
+        "displayName": "Caller Name",
+        "purpose": "Incoming call card."
+      },
+      "island-title": {
+        "displayName": "Card Title",
+        "purpose": "Song title, notification sender."
+      },
+      "island-body": {
+        "displayName": "Card Body",
+        "purpose": "Artist (muted), notification text."
+      },
+      "island-compact": {
+        "displayName": "Compact Label",
+        "purpose": "Left half of the compact pill; call caption."
+      },
+      "island-compact-value": {
+        "displayName": "Compact Value",
+        "purpose": "Right half of the compact pill, in the item's signal colour; chronometers."
+      },
+      "island-meta": {
+        "displayName": "Meta",
+        "purpose": "App name on a notification card."
+      },
+      "island-action": {
+        "displayName": "Action",
+        "purpose": "Notification action chips."
+      },
+      "island-time": {
+        "displayName": "Time",
+        "purpose": "Elapsed/remaining on the music card."
+      }
+    },
+    "fonts": [
+      {
+        "name": "island",
+        "value": "Typeface.create(\"google-sans\", NORMAL) at weights 400/600; Roboto fallback",
+        "source": "IslandView.kt BASE"
+      },
+      {
+        "name": "settings",
+        "value": "Typeface.create(Typeface.DEFAULT, weight, false) at 400/500/600; line spacing multiplier 1.15",
+        "source": "MainActivity.kt weight(), text()"
+      },
+      {
+        "name": "island-tracking",
+        "value": ">=20sp +0.011em; >=17sp -0.022em; >=14sp -0.016em; else 0",
+        "source": "IslandView.kt label()"
+      }
+    ],
+    "shadows": [],
+    "effects": [
+      {
+        "name": "card-glow",
+        "value": "album art or caller photo, RenderEffect blur 48dp (CLAMP), alpha 0.6, center-crop",
+        "purpose": "Depth behind the music and call cards."
+      },
+      {
+        "name": "card-scrim",
+        "value": "linear-gradient(to bottom, rgba(0,0,0,0.20), rgba(0,0,0,0.667), rgba(0,0,0,0.90))",
+        "purpose": "Keeps white text legible over the glow."
+      },
+      {
+        "name": "notification-gradient",
+        "value": "linear-gradient(to bottom, #000000, hsv(h, s, 0.22), hsv(h, s, 0.48)); s clamped 0.45-0.85; hue from Notification.color, else icon dominant colour, else signal-blue",
+        "purpose": "Message card background."
+      },
+      {
+        "name": "music-accent",
+        "value": "album art scaled to 1x1, HSV value raised to at least 0.9; white without art",
+        "purpose": "Waveform and seek bar fill."
+      }
+    ],
+    "motion": [
+      {
+        "name": "spring-model",
+        "value": "w = 2π/response; v += (-w²(x-target) - 2·damping·w·v)·dt; 4ms substeps, frame dt capped at 48ms, divided by the system animator duration scale; settled when |x-target| < 0.5px and |v| < 10px/s",
+        "purpose": "Spring.kt / IslandView.frame(): the island's width and height."
+      },
+      {
+        "name": "spring-grow",
+        "value": "width response 0.36s, height response 0.46s, damping 0.8",
+        "purpose": "Growing out of the camera: widens first, then drops; ~1.5% overshoot."
+      },
+      {
+        "name": "spring-shrink",
+        "value": "width response 0.40s, height response 0.30s, damping 1.0",
+        "purpose": "Shrinking back: pulls up first, then narrows; no overshoot."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.2, 0.9, 0.3, 1)",
+        "purpose": "EASE_OUT: every island content fade, scale, slide and press release."
+      },
+      {
+        "name": "materialize-in",
+        "value": "alpha 0→1, scale 0.9→1, 240ms, 30ms delay, ease-out; blur 14px→0 over 240ms, 30ms delay",
+        "purpose": "Content arriving with the pill."
+      },
+      {
+        "name": "dematerialize-out",
+        "value": "alpha →0, scale →0.94, 120ms, ease-out; blur 0→16px over 120ms",
+        "purpose": "Content leaving."
+      },
+      {
+        "name": "shrink-hold",
+        "value": "70ms",
+        "purpose": "The pill waits for content to fade before shrinking."
+      },
+      {
+        "name": "compact-emerge",
+        "value": "halves translateX ±14dp→0, 320ms, 30ms delay, ease-out (back to ±14dp in 120ms on exit)",
+        "purpose": "The pill's two halves slide out of the camera."
+      },
+      {
+        "name": "card-row-stagger",
+        "value": "each row alpha 0→1, translateY 8dp→0, 260ms, delay 60ms + 40ms × index, ease-out",
+        "purpose": "Card rows arrive one after another."
+      },
+      {
+        "name": "pill-press",
+        "value": "scale 0.97 in 90ms, back to 1 in 220ms, ease-out",
+        "purpose": "Touch-down feedback on the island."
+      },
+      {
+        "name": "icon-press",
+        "value": "scale 0.9 + alpha 0.7 in 80ms, release 200ms ease-out",
+        "purpose": "Media and call glyph buttons."
+      },
+      {
+        "name": "drag",
+        "value": "1:1 with finger; rubber band 0.25× past either end, capped at -0.05..1.05; release projects 200ms of velocity, commits past 0.5; finger velocity handed to the springs",
+        "purpose": "Music pill ⇄ card."
+      },
+      {
+        "name": "fling-dismiss",
+        "value": "upward fling faster than 400dp/s",
+        "purpose": "Swipe up on the island."
+      },
+      {
+        "name": "ring-gauge",
+        "value": "fill 700ms, 150ms delay, DecelerateInterpolator(2)",
+        "purpose": "Download/battery level ring."
+      },
+      {
+        "name": "call-ripple",
+        "value": "two green rings, 1.8s period, half a period apart, ease-out radius, stroke 2dp→0, alpha 150→0",
+        "purpose": "Ringing call photo."
+      },
+      {
+        "name": "answer-rock",
+        "value": "rotation 14°·sin(6πt)·(1-t) over 500ms, every 1.8s",
+        "purpose": "Answer glyph while ringing."
+      },
+      {
+        "name": "waveform",
+        "value": "4 bars, amplitude 0.25 + 0.75·|sin(t(4 + 1.3i) + 1.7i)|; 0.15 when paused",
+        "purpose": "Music playing indicator."
+      },
+      {
+        "name": "settings-fade",
+        "value": "150ms alpha",
+        "purpose": "Stage hint and centre guide."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "ValueAnimator.areAnimatorsEnabled() false: springs snap, blurs skipped, waveform static, ripple hidden, rock off",
+        "purpose": "System Remove animations."
+      }
+    ],
+    "haptics": [
+      {
+        "name": "grow",
+        "value": "CONTEXT_CLICK",
+        "purpose": "The island grows to show something new (not for a chronometer gaining a digit)."
+      },
+      {
+        "name": "long-press",
+        "value": "LONG_PRESS",
+        "purpose": "Only when the item has an app to open."
+      },
+      {
+        "name": "unlock",
+        "value": "CONFIRM",
+        "purpose": "The padlock opens."
+      },
+      {
+        "name": "fit-tick",
+        "value": "CLOCK_TICK",
+        "purpose": "Stage fitting: a value reaches or crosses 0, or hits the end of its range. Respects the Haptics switch."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Island Compact Pill",
+      "kind": "custom",
+      "refersTo": "island-pill",
+      "description": "The black pill around the camera: icon and label left, the camera gap, a signal-coloured value right.",
+      "html": "<div class=\"ds-island\"><span class=\"ds-island-half\"><span class=\"ds-island-icon\"></span><span class=\"ds-island-label\">Timer</span></span><span class=\"ds-island-gap\"></span><span class=\"ds-island-half ds-island-end\"><span class=\"ds-island-value\">4:59</span></span></div>",
+      "css": ".ds-island { display: inline-flex; align-items: center; height: 34px; padding: 0 6px; background: #000000; border-radius: 9999px; color: #FFFFFF; font-family: 'Google Sans', Roboto, sans-serif; transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1); } .ds-island:active { transform: scale(0.97); transition-duration: 90ms; } .ds-island-half { display: inline-flex; align-items: center; gap: 8px; min-width: 72px; } .ds-island-end { justify-content: flex-end; } .ds-island-icon { width: 22px; height: 22px; border-radius: 11px; background: #FF9F0A; } .ds-island-gap { width: 34px; } .ds-island-label { font-size: 14px; font-weight: 400; letter-spacing: -0.016em; } .ds-island-value { font-size: 14px; font-weight: 600; letter-spacing: -0.016em; font-variant-numeric: tabular-nums; color: #FF9F0A; }"
+    },
+    {
+      "name": "Incoming Call Card",
+      "kind": "card",
+      "refersTo": "island-card",
+      "description": "The island grown into a card: round photo, muted caption over the caller's name, red and green 44dp circles.",
+      "html": "<div class=\"ds-call\"><span class=\"ds-call-photo\">R</span><span class=\"ds-call-text\"><span class=\"ds-call-caption\">Incoming call</span><span class=\"ds-call-name\">Rahul</span></span><button class=\"ds-call-btn ds-call-decline\" aria-label=\"Decline\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"#FFFFFF\"><path d=\"M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 0 1 0-1.36C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.72c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z\"/></svg></button><button class=\"ds-call-btn ds-call-answer\" aria-label=\"Answer\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"#FFFFFF\"><path d=\"M6.62 10.79a15.15 15.15 0 0 0 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z\"/></svg></button></div>",
+      "css": ".ds-call { display: flex; align-items: center; width: 360px; padding: 30px 16px 14px; background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.667), rgba(0,0,0,0.9)), #0b3b33; border-radius: 40px; color: #FFFFFF; font-family: 'Google Sans', Roboto, sans-serif; } .ds-call-photo { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 24px; background: #00796B; outline: 2px solid rgba(48,209,88,0.5); outline-offset: 6px; font-size: 21px; } .ds-call-text { display: flex; flex-direction: column; flex: 1; padding: 0 4px 0 12px; } .ds-call-caption { font-size: 14px; color: rgba(255,255,255,0.70); letter-spacing: -0.016em; } .ds-call-name { font-size: 21px; font-weight: 600; letter-spacing: 0.011em; } .ds-call-btn { display: grid; place-items: center; width: 44px; height: 44px; margin-left: 12px; border: none; border-radius: 9999px; transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1), opacity 200ms; } .ds-call-btn:active { transform: scale(0.9); opacity: 0.7; transition-duration: 80ms; } .ds-call-decline { background: #FF453A; } .ds-call-answer { background: #30D158; }"
+    },
+    {
+      "name": "Message Card",
+      "kind": "card",
+      "refersTo": "island-card",
+      "description": "Notification card on a black-to-brand gradient, with up to three 36dp action chips.",
+      "html": "<div class=\"ds-msg\"><div class=\"ds-msg-row\"><span class=\"ds-msg-icon\"></span><span class=\"ds-msg-text\"><span class=\"ds-msg-head\"><span class=\"ds-msg-title\">Priya</span><span class=\"ds-msg-app\">Messages</span></span><span class=\"ds-msg-body\">On my way, ten minutes.</span></span></div><div class=\"ds-msg-actions\"><button class=\"ds-msg-action\">Reply</button><button class=\"ds-msg-action\">Mark as read</button></div></div>",
+      "css": ".ds-msg { width: 360px; padding: 30px 16px 18px; background: linear-gradient(to bottom, #000000, #1b2a38, #3d6080); border-radius: 40px; color: #FFFFFF; font-family: 'Google Sans', Roboto, sans-serif; } .ds-msg-row { display: flex; align-items: center; } .ds-msg-icon { width: 48px; height: 48px; border-radius: 24px; background: #2C2C2E; flex: none; } .ds-msg-text { display: flex; flex-direction: column; flex: 1; padding: 0 4px 0 12px; } .ds-msg-head { display: flex; gap: 8px; align-items: baseline; } .ds-msg-title { flex: 1; font-size: 17px; font-weight: 600; letter-spacing: -0.022em; } .ds-msg-app { font-size: 13px; color: rgba(255,255,255,0.70); } .ds-msg-body { padding-top: 2px; font-size: 15px; letter-spacing: -0.016em; } .ds-msg-actions { display: flex; gap: 6px; margin-top: 10px; } .ds-msg-action { flex: 1; min-height: 36px; padding: 0 10px; border: none; border-radius: 18px; background: rgba(255,255,255,0.15); color: #FFFFFF; font: 600 13px 'Google Sans', Roboto, sans-serif; }"
+    },
+    {
+      "name": "Settings Group with Switches",
+      "kind": "card",
+      "refersTo": "group",
+      "description": "A basalt slab of rows with inset seam hairlines; monochrome switches (bone on, track grey off, ink thumb).",
+      "html": "<div class=\"ds-group\"><label class=\"ds-switch-row\"><span>Music</span><input type=\"checkbox\" class=\"ds-switch\" checked></label><label class=\"ds-switch-row\"><span>Calls</span><input type=\"checkbox\" class=\"ds-switch\"></label></div>",
+      "css": ".ds-group { width: 360px; background: #161618; border-radius: 24px; overflow: hidden; font-family: system-ui, sans-serif; } .ds-switch-row { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 8px 16px; color: #F4F4F1; font-size: 16px; line-height: 1.15; box-sizing: border-box; } .ds-switch-row + .ds-switch-row::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: #2A2A2E; } .ds-switch-row:active { background: rgba(255,255,255,0.14); } .ds-switch { appearance: none; position: relative; width: 52px; height: 32px; margin: 0; border-radius: 16px; background: #6E6E76; } .ds-switch::after { content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 12px; background: #000000; } .ds-switch:checked { background: #F4F4F1; } .ds-switch:checked::after { left: 24px; }"
+    },
+    {
+      "name": "Style Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Basalt pill that plays a demo style on the stage; seam fill and a bone outline while its demo plays. Wraps like words.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" aria-pressed=\"true\">Photo</button><button class=\"ds-chip\">Name only</button><button class=\"ds-chip\">Unknown number</button></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 8px; } .ds-chip { min-height: 48px; padding: 10px 18px; border: 1.5px solid transparent; border-radius: 24px; background: #161618; color: #F4F4F1; font: 500 15px system-ui, sans-serif; } .ds-chip:active { background-image: linear-gradient(rgba(255,255,255,0.14), rgba(255,255,255,0.14)); } .ds-chip[aria-pressed=\"true\"] { background: #2A2A2E; border-color: #F4F4F1; }"
+    },
+    {
+      "name": "Segmented Tabs",
+      "kind": "nav",
+      "refersTo": "segment-selected",
+      "description": "One basalt track with a 4dp inset; the selected segment is a bone pill with ink text, the others let the track show through with pumice text.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" aria-selected=\"true\">Calls</button><button class=\"ds-tab\">Messages</button><button class=\"ds-tab\">Live</button><button class=\"ds-tab\">System</button></div>",
+      "css": ".ds-tabs { display: flex; padding: 4px; width: 360px; border-radius: 28px; background: #161618; } .ds-tab { flex: 1; min-height: 48px; border: none; border-radius: 24px; background: transparent; color: #9E9EA6; font: 600 14px system-ui, sans-serif; } .ds-tab:active { background-image: linear-gradient(rgba(255,255,255,0.14), rgba(255,255,255,0.14)); } .ds-tab[aria-selected=\"true\"] { background: #F4F4F1; color: #000000; }"
+    },
+    {
+      "name": "Fitting Stage",
+      "kind": "custom",
+      "refersTo": "stage",
+      "description": "Basalt stage with the camera drawn as a 1px ring 44dp from the top; the real island plays here at 1:1.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-stage-guide\"></span><span class=\"ds-stage-ring\"></span><span class=\"ds-stage-hint\">Tap a style below to play it here.</span></div><div class=\"ds-stage-foot\"><span>Drag to move. Pinch to widen.</span><span class=\"ds-stage-readout\">x 0   y 0   w 0   h 0</span></div>",
+      "css": ".ds-stage { position: relative; width: 360px; height: 208px; background: #161618; border-radius: 28px; overflow: hidden; font-family: system-ui, sans-serif; } .ds-stage-ring { position: absolute; top: 31px; left: 167px; width: 26px; height: 26px; border: 1px solid #6E6E76; border-radius: 50%; box-sizing: border-box; } .ds-stage-guide { position: absolute; top: 0; bottom: 0; left: 180px; width: 1px; background: #F4F4F1; opacity: 0; transition: opacity 150ms; } .ds-stage:active .ds-stage-guide { opacity: 1; } .ds-stage-hint { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; color: #9E9EA6; font-size: 13px; } .ds-stage-foot { display: flex; justify-content: space-between; width: 328px; padding: 10px 16px 0; font: 13px system-ui, sans-serif; color: #9E9EA6; } .ds-stage-readout { color: #F4F4F1; font-weight: 500; font-variant-numeric: tabular-nums; white-space: pre; }"
+    },
+    {
+      "name": "Setup Step Row",
+      "kind": "custom",
+      "refersTo": "step-mark-done",
+      "description": "Numbered pumice ring when missing; filled green with an ink check when granted, action reads On.",
+      "html": "<div class=\"ds-group ds-steps\"><div class=\"ds-step\"><span class=\"ds-step-mark ds-step-done\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#000000\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"/></svg></span><span class=\"ds-step-text\"><span class=\"ds-step-title\">Show the island</span><span class=\"ds-step-sub\">Accessibility</span></span><span class=\"ds-step-action ds-step-on\">On</span></div><div class=\"ds-step\"><span class=\"ds-step-mark\">2</span><span class=\"ds-step-text\"><span class=\"ds-step-title\">Music, calls and notifications</span><span class=\"ds-step-sub\">Notification access</span></span><span class=\"ds-step-action\">Allow</span></div></div>",
+      "css": ".ds-steps { width: 360px; background: #161618; border-radius: 24px; overflow: hidden; font-family: system-ui, sans-serif; } .ds-step { position: relative; display: flex; align-items: center; min-height: 64px; padding: 12px 16px; box-sizing: border-box; } .ds-step + .ds-step::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: #2A2A2E; } .ds-step:active { background: rgba(255,255,255,0.14); } .ds-step-mark { display: grid; place-items: center; width: 28px; height: 28px; margin-right: 14px; border: 2px solid #9E9EA6; border-radius: 50%; box-sizing: border-box; color: #9E9EA6; font-size: 13px; font-weight: 600; flex: none; } .ds-step-done { border: none; background: #30D158; } .ds-step-text { display: flex; flex-direction: column; flex: 1; line-height: 1.15; } .ds-step-title { color: #F4F4F1; font-size: 16px; font-weight: 500; } .ds-step-sub { color: #9E9EA6; font-size: 13px; } .ds-step-action { color: #F4F4F1; font-size: 15px; font-weight: 600; } .ds-step-on { color: #9E9EA6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Fitting Room",
+    "overview": "Tab Island is one material in two places. On top of any app, it is a true-black pill grown out of the front camera, measured from the real cutout, that swells into cards for music, calls and messages and shrinks back into the hole on a spring. In the settings app, the same black becomes the page, and grey basalt slabs (each group \"a small island\") hold the switches. The settings screen is the island's fitting room: the real `IslandView` sits on a stage at 1:1 scale under a drawn camera ring, you drag it to fit, and every style plays on it from a chip.\n\nThe palette is monochrome on purpose. Black, basalt, bone and pumice do all the structural work; colour appears only as signal (green, orange, red, yellow, blue), each tied to a meaning, plus colour borrowed from content (album art, contact photos, an app's brand colour). Density is relaxed and thumb-first: 48dp chips and tabs, 56 to 64dp rows, a single column with a 16dp gutter.\n\nMotion belongs to the island. It is the only thing that springs; the settings chrome moves only in short 150ms fades (the stage hint and the centre guide); chips swap in place and setup marks change without a pop. Every animation checks the system \"Remove animations\" setting.",
+    "keyCharacteristics": [
+      "True black (#000000) island and page, never tinted at rest, never shadowed.",
+      "Basalt groups with inset seam hairlines instead of cards with shadows.",
+      "Monochrome controls: bone is \"on/selected\", ink is the thumb, pumice is secondary.",
+      "Pills everywhere: every tappable chip and tab is fully rounded.",
+      "Spring motion for the island's size, scale-and-blur materialising for its content.",
+      "Colour is signal or borrowed from content; never decoration."
+    ],
+    "rules": [
+      {
+        "name": "The True Black Rule",
+        "body": "The island is #000000 on screen, always (a brand commitment in PRODUCT.md). It may carry borrowed colour inside a card, but the pill itself is never tinted, lightened or given a border.",
+        "section": "colors"
+      },
+      {
+        "name": "The Signal Rule",
+        "body": "Each signal colour means one thing, on both surfaces. In settings, green appears only when something is on or done; a control is never green just to look active.",
+        "section": "colors"
+      },
+      {
+        "name": "The Monochrome Control Rule",
+        "body": "Settings controls are bone on basalt with ink thumbs. Selected and on are shown by bone fill, not by an accent colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any number that changes in place (chronometers, seek times, slider readouts, the x/y/w/h readout) uses tabular figures, so the pill and the readouts never jitter as digits change.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Basalt Rule",
+        "body": "Settings surfaces separate by tone only (ink → basalt → seam). Never add a shadow, border or elevation to a group, chip or the stage.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Concentric Rule",
+        "body": "Anything sitting in the island's round end takes the pill's radius minus its inset, never a fixed radius of its own.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** keep the island and the settings ground at true black (#000000), and build settings structure from basalt slabs and seam hairlines only.",
+      "**Do** make every chip and tab a full pill at 48dp tall, and every list row at least 56dp.",
+      "**Do** use one meaning per signal colour: green on/done/answer/charging, orange timers and partial states, red decline and warnings, yellow flashlight, blue downloads and the notification fallback.",
+      "**Do** show selection and \"on\" in bone, with ink text or thumbs on it.",
+      "**Do** use tabular figures for every number that updates in place.",
+      "**Do** keep content in the island concentric with the pill's round end, and start card text below the camera band.",
+      "**Do** put new island motion on the springs (grow: responses 0.36s/0.46s, damping 0.8; shrink: 0.40s/0.30s, damping 1) and keep velocity across interruptions.",
+      "**Do** check the system \"Remove animations\" setting: springs snap, blurs are skipped, the waveform holds still and the ripple rings disappear.",
+      "**Do** give custom controls a TalkBack role and a state (\"Calls, selected, button\"; \"+4 dp\")."
+    ],
+    "donts": [
+      "**Don't** give the island a drop shadow, border or tint at rest; a shadow's margin becomes a dead touch zone over the app below.",
+      "**Don't** add shadows or elevation to settings groups, chips or the stage.",
+      "**Don't** colour a settings control with an accent to make it look active; green there means granted or running, nothing else.",
+      "**Don't** use a grey switch thumb; it sinks into the lighter off track. The thumb stays ink on both tracks.",
+      "**Don't** animate settings chrome with springs or long transitions; the island is the only thing that springs. Settings motion is limited to 150ms fades; chips and setup marks change in place.",
+      "**Don't** let a long label push the camera off-centre in the compact pill; both halves stay equal width and the text ellipsizes."
+    ]
+  }
+}
