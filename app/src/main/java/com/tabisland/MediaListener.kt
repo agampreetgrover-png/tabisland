@@ -23,12 +23,14 @@ import android.util.Log
 class MediaListener : NotificationListenerService() {
     private var msm: MediaSessionManager? = null
     private var controller: MediaController? = null
+    // kept from the callback: controller.metadata is an IPC that unparcels a new art bitmap on every playback tick
+    private var meta: MediaMetadata? = null
     private val alerted = HashSet<String>()
     private val popped = HashMap<String, String>() // key -> title and text of its last flash
     private val me by lazy { ComponentName(this, MediaListener::class.java) }
 
     private val callback = object : MediaController.Callback() {
-        override fun onMetadataChanged(metadata: MediaMetadata?) = publish()
+        override fun onMetadataChanged(metadata: MediaMetadata?) { meta = metadata; publish() }
         override fun onPlaybackStateChanged(state: PlaybackState?) = publish()
         override fun onSessionDestroyed() = attach(null)
     }
@@ -36,7 +38,7 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         Island.listening = true; Island.syncHeadsUp(this) // the island shows notifications instead of the system banner
-        Island.cancel = { cancelNotification(it) }
+        Island.cancel = { safe { cancelNotification(it) } } // throws SecurityException once access is revoked
         val m = getSystemService(MediaSessionManager::class.java)
         msm = m
         m.addOnActiveSessionsChangedListener(sessions, me)
@@ -69,7 +71,7 @@ class MediaListener : NotificationListenerService() {
         // only popups that would make a sound: respects silent channels and Do Not Disturb; suspended apps stay quiet
         val loud = rankingMap?.getRanking(sbn.key, r) == true &&
             r.importance >= NotificationManager.IMPORTANCE_DEFAULT && r.matchesInterruptionFilter() && !r.isSuspended
-        safe { classify(sbn, loud) }
+        safe { classify(sbn, loud, loud && r.importance >= NotificationManager.IMPORTANCE_HIGH) }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -84,7 +86,7 @@ class MediaListener : NotificationListenerService() {
     }
 
     // one call/timer slot: another running call or stopwatch may have been hidden behind the one that ended
-    private fun rescan(gone: String) { activeNotifications?.forEach { if (it.key != gone && it.isOngoing) safe { classify(it, alert = false) } } }
+    private fun rescan(gone: String) { safe { activeNotifications }?.forEach { if (it.key != gone && it.isOngoing) safe { classify(it, alert = false) } } }
 
     /** Another app's extras can hold a class we can't unparcel (BadParcelableException): skip it, never crash the listener. */
     private inline fun <T> safe(read: () -> T): T? =
@@ -98,7 +100,8 @@ class MediaListener : NotificationListenerService() {
         return (x.getInt(Notification.EXTRA_PROGRESS) * 100L / max).toInt().coerceIn(0, 100)
     }
 
-    private fun classify(sbn: StatusBarNotification, alert: Boolean) {
+    /** [high]: a heads-up-level alert, which the system would pop even for an ongoing notification. */
+    private fun classify(sbn: StatusBarNotification, alert: Boolean, high: Boolean = false) {
         val n = sbn.notification
         val x = n.extras
         val pkg = sbn.packageName
@@ -115,14 +118,19 @@ class MediaListener : NotificationListenerService() {
         val paused = if (sbn.isOngoing && chrono == null) metric(n)?.takeIf { it.containsKey("pausedDuration") }?.getLong("pausedDuration") else null
         val nav = sbn.isOngoing && n.category == Notification.CATEGORY_NAVIGATION
         val progress = if (sbn.isOngoing) progressOf(n) else null // a finished, dismissible "100%" isn't live
-        if (!nav && progress == null) Island.removeOngoing(sbn.key) // e.g. a finished download
+        // a delivery or ride shows its minutes, not its bar's percent: Android 16's Live Update chip text, else the
+        // time in its words ("Arriving in 12 mins"); a download has neither and keeps the percent
+        val critical = if (sbn.isOngoing) x.getCharSequence("android.shortCriticalText")?.toString()?.takeIf { it.isNotBlank() } else null
+        val eta = critical ?: if (progress != null) eta(title, text) else null
+        if (!nav && progress == null && critical == null) Island.removeOngoing(sbn.key) // e.g. a finished download
         // an update that no longer qualifies (e.g. stopwatch paused, call ended, timer turned progress) must not leave the old one showing
         val hadSlot = Island.call?.key == sbn.key || Island.timer?.key == sbn.key
         if (Island.call?.key == sbn.key) Island.call = null
         if (Island.timer?.key == sbn.key) Island.timer = null
-        // alarms, reminders and full-screen alerts are ongoing, so the message path below never pops them
-        val alarm = sbn.isOngoing && n.category != Notification.CATEGORY_CALL && (n.fullScreenIntent != null ||
-            n.category == Notification.CATEGORY_ALARM || n.category == Notification.CATEGORY_REMINDER)
+        // alarms, reminders and full-screen alerts get a 60 s card: they're usually ongoing, which the message path
+        // skips, and an alarm app's non-ongoing one mustn't vanish after 6 s while it rings
+        val alarm = n.category != Notification.CATEGORY_CALL && (n.fullScreenIntent != null ||
+            n.category == Notification.CATEGORY_ALARM || sbn.isOngoing && n.category == Notification.CATEGORY_REMINDER)
         // a running or paused timer or stopwatch is the timer pill, not a 60 s blank card; a full-screen alert with no
         // text still shows its app
         if (alert && alarm && (chrono == null && paused == null || n.fullScreenIntent != null) &&
@@ -140,25 +148,29 @@ class MediaListener : NotificationListenerService() {
                     largeIcon(n) ?: appIcon(pkg), actions ?: n.actions?.toList().orEmpty(), chrono?.first,
                     pkg, n.contentIntent ?: n.fullScreenIntent, ringing)
             }
-            sbn.isOngoing && (chrono != null || paused != null) -> Island.timer = Timer(sbn.key,
-                paused?.let { "Paused " + DateUtils.formatElapsedTime(it / 1000) } ?: title.ifEmpty { text },
-                appIcon(pkg), chrono?.first, chrono?.second ?: false, pkg, n.contentIntent)
+            // first come keeps the slot (it was freed above if this is its own update), so a screen recorder's
+            // chronometer can't flip-flop with a Clock timer; a running one does take it from a paused one. The rescan
+            // shows the next once the shown one ends
+            sbn.isOngoing && (chrono != null || paused != null) -> if (Island.timer == null || chrono != null && Island.timer?.base == null)
+                Island.timer = Timer(sbn.key, paused?.let { "Paused " + DateUtils.formatElapsedTime(it / 1000) } ?: title.ifEmpty { text },
+                    appIcon(pkg), chrono?.first, chrono?.second ?: false, pkg, n.contentIntent)
             // Google Maps: title is the distance to the next turn, large icon the turn arrow
             nav -> Island.putOngoing(Ongoing(sbn.key, "nav", title, "", largeIcon(n) ?: appIcon(pkg),
                 WHITE, null, 3, pkg, n.contentIntent))
-            progress != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", "$progress%", appIcon(pkg),
-                BLUE, progress, 1, pkg, n.contentIntent))
+            progress != null || critical != null -> Island.putOngoing(Ongoing(sbn.key, "progress", "", eta ?: "$progress%",
+                appIcon(pkg), BLUE, progress, 1, pkg, n.contentIntent))
             else -> {
                 val summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0
                 // shortcut: a summary posted before its first child still pops too; apps post the child first
                 val loudChild = summary && n.group != null && activeNotifications.orEmpty().any { c -> c.key != sbn.key &&
-                    c.packageName == pkg && c.notification.group == n.group &&
+                    c.packageName == pkg && c.user == sbn.user && c.notification.group == n.group &&
                     c.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 &&
                     !groupMuted(n.group, false, c.notification.groupAlertBehavior) }
                 val muted = groupMuted(n.group, summary, n.groupAlertBehavior, loudChild)
                 // seeds the active ones at connect, so their unchanged re-posts after a reconnect don't pop again
-                if (!alert && !sbn.isOngoing) popped.putIfAbsent(sbn.key, signature(n, title, text))
-                if (alert && !sbn.isOngoing && !muted && (title.isNotEmpty() || text.isNotEmpty())) {
+                if (!alert) popped.putIfAbsent(sbn.key, signature(n, title, text))
+                // the system pop-ups are off: an ongoing heads-up alert (a ride arriving) must still pop; alarms did above
+                if (alert && (!sbn.isOngoing || high && !alarm) && !muted && (title.isNotEmpty() || text.isNotEmpty())) {
                     val first = alerted.add(sbn.key)
                     // an unchanged re-post (e.g. a read receipt or re-sort) isn't news; the same words sent again are
                     if (first || n.flags and Notification.FLAG_ONLY_ALERT_ONCE == 0 && popped[sbn.key] != signature(n, title, text))
@@ -176,7 +188,10 @@ class MediaListener : NotificationListenerService() {
     @Suppress("DEPRECATION")
     private fun signature(n: Notification, title: String, text: String): String {
         val msgs = safe { n.extras.getParcelableArray(Notification.EXTRA_MESSAGES) }
-        val stamp = if (msgs.isNullOrEmpty()) "${n.`when`}" else "${msgs.size}/${(msgs.last() as? Bundle)?.getLong("time")}"
+        // the last message someone else sent (the user's own have no sender): a reply or trimmed history appended to
+        // the list re-posts it, but the card would only show the same old message again
+        val last = msgs?.lastOrNull { (it as? Bundle)?.run { containsKey("sender") || containsKey("sender_person") } == true } as? Bundle
+        val stamp = last?.getLong("time")?.toString() ?: "${n.`when`}"
         return "$title\n$text\n$stamp"
     }
 
@@ -202,7 +217,8 @@ class MediaListener : NotificationListenerService() {
     /** (elapsedRealtime base, countDown) from a chronometer notification or a running MetricStyle time. */
     private fun chronometer(n: Notification): Pair<Long, Boolean>? {
         val x = n.extras
-        if (x.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
+        // when = 0 (unset) would put the base 56 years back: a pill of huge hours
+        if (x.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER) && n.`when` > 0) {
             return SystemClock.elapsedRealtime() + (n.`when` - System.currentTimeMillis()) to x.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
         }
         val v = metric(n) ?: return null
@@ -213,8 +229,10 @@ class MediaListener : NotificationListenerService() {
      * The first metric's value of a MetricStyle notification (Google Clock's timers and stopwatch on Android 16+): no
      * chronometer, no text, the time is in "android.metrics". Notification.Metric isn't in SDK 36, so read the bundle.
      */
+    // the typed getParcelableArrayList is API 33: on Android 12 it's a NoSuchMethodError, which safe() doesn't catch
+    @Suppress("DEPRECATION")
     private fun metric(n: Notification): Bundle? =
-        safe { n.extras.getParcelableArrayList("android.metrics", Bundle::class.java)?.firstOrNull()?.getBundle("value") }
+        safe { (n.extras.getParcelableArrayList<Parcelable>("android.metrics")?.firstOrNull() as? Bundle)?.getBundle("value") }
 
     /** The notification's own picture (contact photo, turn arrow); null when it can't be read or decodes to nothing. */
     private fun largeIcon(n: Notification): Drawable? =
@@ -232,6 +250,7 @@ class MediaListener : NotificationListenerService() {
         if (c?.sessionToken != controller?.sessionToken) {
             controller?.unregisterCallback(callback)
             controller = c
+            meta = c?.metadata
             c?.registerCallback(callback)
         }
         publish()
@@ -239,7 +258,7 @@ class MediaListener : NotificationListenerService() {
 
     private fun publish() {
         val c = controller
-        val m = c?.metadata
+        val m = meta
         Island.controller = c
         if (c == null || m == null) { Island.media = null; return }
         val s = c.playbackState
@@ -264,6 +283,20 @@ class MediaListener : NotificationListenerService() {
             open = c.sessionActivity,
         )
     }
+}
+
+private val MINUTES = Regex("""(\d+(?:\s*[-–]\s*\d+)?)\s*(mins?|minutes?|hrs?|hours?)\b""", RegexOption.IGNORE_CASE)
+private val CLOCK = Regex("""\b\d{1,2}:\d{2}(?:\s*[ap]\.?m\.?)?""", RegexOption.IGNORE_CASE)
+
+/** The arrival time in a delivery or ride's words: "Arriving in 10-15 mins" → "10–15 min", "by 7:45 pm" → "7:45 pm". */
+internal fun eta(vararg texts: String): String? {
+    texts.forEach { t ->
+        MINUTES.find(t)?.let { m ->
+            val unit = if (m.groupValues[2].startsWith("h", ignoreCase = true)) "hr" else "min"
+            return m.groupValues[1].replace(Regex("""\s*[-–]\s*"""), "–") + " " + unit
+        }
+    }
+    return texts.firstNotNullOfOrNull { CLOCK.find(it)?.value }
 }
 
 /** Incoming and unanswered: CallStyle says so, or (no CallStyle) a full-screen intent, which is how calls ring; dialing has neither. */

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- fixed ids for views built in code: a view only saves its state (scroll position, typed text) across recreation when it has one -->
+<resources>
+    <item type="id" name="scroll" />
+    <item type="id" name="reply" />
+</resources>

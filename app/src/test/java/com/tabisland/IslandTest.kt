@@ -35,6 +35,7 @@ class IslandTest {
         assertEquals(red, dominant(intArrayOf(red, WHITE, WHITE, 0x00000000, 0xFF808080.toInt())))
         assertNull(dominant(intArrayOf(WHITE, 0xFF808080.toInt(), 0xFF000000.toInt(), 0)))
         assertNull(dominant(intArrayOf(0))) // Notification.COLOR_DEFAULT
+        assertNull(dominant(IntArray(0))) // nothing to average: not black
     }
 
     @Test fun callBeatsEverything() = assertSame(call, pick(call, flash(), timer, listOf(nav), media(true), now, all))

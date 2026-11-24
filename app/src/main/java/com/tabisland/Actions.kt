@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
@@ -23,6 +24,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.lang.ref.WeakReference
 
 private const val TAG = "TabIsland"
 
@@ -39,15 +41,30 @@ class ReplyActivity : Activity() {
             Intent(ctx, ReplyActivity::class.java).putExtra("action", a).putExtra("title", title)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+
+        // noHistory finishes this the moment you switch away (e.g. to copy something): the unsent text waits here for
+        // the same chat's reply (same intent) to open again
+        private var draft: Pair<PendingIntent, String>? = null
+    }
+
+    private var unsent: (() -> String)? = null
+    private var target: PendingIntent? = null
+
+    override fun onPause() {
+        super.onPause()
+        val t = target ?: return
+        unsent?.invoke()?.takeIf { it.isNotBlank() }?.let { draft = t to it }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         val a = intent.getParcelableExtra<Notification.Action>("action") ?: return finish()
+        target = a.actionIntent
         val dp = resources.displayMetrics.density
         fun px(v: Int) = (v * dp).toInt()
         val box = EditText(this).apply {
+            id = R.id.reply // keeps the typed reply across a rotation
             hint = a.remoteInputs?.firstOrNull()?.label ?: "Message"
             textSize = 16f; setTextColor(BONE); setHintTextColor(PUMICE)
             background = GradientDrawable().apply { setColor(SEAM); cornerRadius = px(20).toFloat() }
@@ -88,12 +105,16 @@ class ReplyActivity : Activity() {
         window.setBackgroundDrawable(GradientDrawable().apply { setColor(BASALT); cornerRadius = px(28).toFloat() })
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         window.setGravity(Gravity.BOTTOM)
+        if (savedInstanceState == null) draft?.takeIf { it.first == a.actionIntent }?.let { box.setText(it.second); box.setSelection(box.length()) }
+        draft = null
+        unsent = { box.text.toString() }
         box.requestFocus()
     }
 
     private fun send(a: Notification.Action, text: CharSequence) {
         if (text.isBlank()) return
         val inputs = a.remoteInputs ?: return finish()
+        val pi = a.actionIntent ?: return finish() // Action.Builder accepts a null intent: nothing to send it to
         val fillIn = Intent()
         RemoteInput.addResultsToIntent(inputs, fillIn, Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } })
         // Android 14+ blocks an activity start from the sent intent unless the sender opts in (as IslandService.send)
@@ -105,13 +126,18 @@ class ReplyActivity : Activity() {
             opts.setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
         }
         try {
-            a.actionIntent.send(this, 0, fillIn, null, null, null, opts.toBundle())
+            pi.send(this, 0, fillIn, null, null, null, opts.toBundle())
         } catch (e: PendingIntent.CanceledException) {
             // the app withdrew the reply (e.g. the chat was read elsewhere): keep the text so it isn't lost silently
             Log.w(TAG, "reply intent no longer valid", e)
             Toast.makeText(this, "Couldn't send: the app closed this reply", Toast.LENGTH_LONG).show()
             return
+        } catch (e: SecurityException) { // an app's intent we aren't allowed to send: same, keep the text
+            Log.w(TAG, "reply intent refused", e)
+            Toast.makeText(this, "Couldn't send: the app refused this reply", Toast.LENGTH_LONG).show()
+            return
         }
+        unsent = null // sent: nothing to keep
         finish()
     }
 }
@@ -123,10 +149,21 @@ class UnlockActivity : Activity() {
             Intent(ctx, UnlockActivity::class.java).putExtra("pi", pi).putExtra("launch", launch)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+
+        private var current: WeakReference<UnlockActivity>? = null
+    }
+
+    // the screen went off with the unlock prompt up: the request is over, don't stay invisibly over the keyguard
+    override fun onStop() {
+        super.onStop()
+        if (!isFinishing && !getSystemService(PowerManager::class.java).isInteractive) finish()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // taps while one waits on the keyguard would stack invisible copies: the latest tap wins
+        current?.get()?.takeIf { it !== this }?.finish()
+        current = WeakReference(this)
         setShowWhenLocked(true)
         @Suppress("DEPRECATION") val pi = intent.getParcelableExtra<PendingIntent>("pi")
         @Suppress("DEPRECATION") val launch = intent.getParcelableExtra<Intent>("launch")

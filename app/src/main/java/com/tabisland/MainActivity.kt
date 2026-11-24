@@ -59,7 +59,7 @@ object Prefs {
             "timer" to "Timers and stopwatch",
             "nav" to "Navigation",
             "torch" to "Flashlight",
-            "progress" to "Download progress",
+            "progress" to "Downloads and deliveries",
         ),
         "System events" to listOf(
             "charge" to "Charging",
@@ -138,7 +138,12 @@ class MainActivity : Activity() {
     // the preview only shows; every touch on the stage goes to the fitting gestures above it
     private val previewHost = object : IslandView.Host {
         override fun touch(w: Int, h: Int, on: Boolean) {}
-        override fun canvas(h: Int) {}
+        // a tall card (a long message, a large font, the island moved down) grows the stage instead of being clipped;
+        // it doesn't shrink back, so the page doesn't jump under the reader each time the card closes
+        override fun canvas(h: Int) {
+            val need = preview.translationY.roundToInt() + h
+            if (need > stage.layoutParams.height) stage.layoutParams = stage.layoutParams.apply { height = need }
+        }
         override fun expand(open: Boolean) {}
         override fun tap() {}
         override fun longPress() {}
@@ -270,7 +275,7 @@ class MainActivity : Activity() {
         prefs.registerOnSharedPreferenceChangeListener(prefsChanged)
 
         setContentView(ScrollView(this).apply {
-            id = 1 // fixed id: a ScrollView only keeps its scroll position across recreation when it has one
+            id = R.id.scroll // fixed id: a ScrollView only keeps its scroll position across recreation when it has one
             setBackgroundColor(INK)
             isVerticalScrollBarEnabled = false
             addView(col)
@@ -309,9 +314,20 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         Island.syncHeadsUp(this) // repairs a value left at 0 by a process killed without callbacks (force-stop)
+        refreshStatus()
+        // the service owns onChange; the preview gets its own hook, coalesced to one render per frame like the service's
+        Island.preview = { handler.removeCallbacks(renderLater); handler.post(renderLater) }
+        layoutPreview()
+    }
+
+    private var runningShown = false // whether the status below last saw the island running
+
+    /** Setup steps and status; also re-run when the island starts or stops while this screen is up (the a11y shortcut). */
+    private fun refreshStatus() {
         val a11y = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
             ?.contains("$packageName/") == true
         val running = Island.onChange != null // enabled in settings isn't enough: the service can be bound but dead
+        runningShown = running
         val notif = getSystemService(NotificationManager::class.java)
             .isNotificationListenerAccessGranted(ComponentName(this, MediaListener::class.java))
         val secure = checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
@@ -324,8 +340,10 @@ class MainActivity : Activity() {
         }
         statusDot.setColor(when { !a11y -> RED; running && notif -> GREEN; else -> ORANGE })
         restrictedHint.visibility = if (a11y && notif) View.GONE else View.VISIBLE
-        undoNote.visibility = if (secure) View.VISIBLE else View.GONE
-        if (running) demoHint.visibility = View.GONE
+        // also with the grant revoked while pop-ups are off: the island can't turn them back on, the command can
+        val popupsOff = Settings.Global.getInt(contentResolver, "heads_up_notifications_enabled", 1) == 0
+        undoNote.visibility = if (secure || popupsOff) View.VISIBLE else View.GONE
+        if (running) demoHint.visibility = View.GONE // shown by a demo tap while the island is off
         // finished setup is rarely needed again: it moves to the end, out of the way of the demos and switches
         val done = running && notif
         val at = if (done) col.childCount - 1 else setupAt
@@ -333,9 +351,6 @@ class MainActivity : Activity() {
             col.removeView(setup)
             col.addView(setup, if (done) col.childCount else setupAt)
         }
-        // the service owns onChange; the preview gets its own hook, coalesced to one render per frame like the service's
-        Island.preview = { handler.removeCallbacks(renderLater); handler.post(renderLater) }
-        layoutPreview()
     }
 
     // ---- the stage ----
@@ -422,11 +437,15 @@ class MainActivity : Activity() {
         if (w == 0) return // first layout pending; the stage's layout listener calls back
         val m = windowManager.currentWindowMetrics
         val cut = cameraHole(m, density)
-        val camX = cut.centerX() - m.bounds.width() / 2 // camera centre relative to the screen centre
+        // camera centre relative to the screen centre; in landscape the hole is at a side edge, where the stage can't
+        // show it (the real island hides there anyway): keep the portrait centre
+        val camX = if (m.bounds.width() > m.bounds.height()) 0 else cut.centerX() - m.bounds.width() / 2
         val pad = dp(5)
         val pillH = cut.height() + 2 * pad + dp(prefs.getInt("h", 0))
         val gapW = cut.width() + 2 * pad
-        val dx = camX + dp(prefs.getInt("x", 0))
+        // the service's clamp: a corner camera moves the island in far enough to keep cards 280dp wide
+        val maxDx = ((m.bounds.width() - dp(16 + 280)) / 2).coerceAtLeast(0)
+        val dx = (camX + dp(prefs.getInt("x", 0))).coerceIn(-maxDx, maxDx)
         preview.geometry(pillH, gapW, max(pillH, gapW) + dp(prefs.getInt("w", 0).coerceAtLeast(0)), w - dp(16) - 2 * abs(dx), dx)
         val holeY = dp(HOLE_Y)
         preview.translationY = (holeY - pillH / 2 + dp(prefs.getInt("y", 0))).toFloat()
@@ -446,6 +465,7 @@ class MainActivity : Activity() {
     private fun renderPreview() {
         handler.removeCallbacks(renderLater)
         val now = System.currentTimeMillis()
+        if ((Island.onChange != null) != runningShown) refreshStatus() // the island started or stopped under this screen
         val live = Island.top(now) { it == Island.demo || prefs.getBoolean(it, true) }
         // with "Show the pill when idle" off the real island is empty at rest; the stage still shows where it would sit,
         // dimmed, so there is something to drag

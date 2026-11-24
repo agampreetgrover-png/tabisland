@@ -116,6 +116,7 @@ object Island {
     var controller: MediaController? = null
     /** Set while the island service runs; MainActivity reads it as "the island is running". */
     var onChange: (() -> Unit)? = null
+        set(v) { field = v; preview?.invoke() } // the settings screen's status follows the island starting or stopping
     /** Set while the settings screen's preview is on screen; it redraws alongside the real island. */
     var preview: (() -> Unit)? = null
     private fun changed() { onChange?.invoke(); preview?.invoke() }
@@ -233,7 +234,7 @@ fun dominant(px: IntArray): Int? {
         val w = (p ushr 24) / 255f * (maxOf(pr, pg, pb) - minOf(pr, pg, pb)) / 255f
         r += pr * w; g += pg * w; b += pb * w; total += w
     }
-    if (total < px.size * 0.05f) return null
+    if (total <= 0f || total < px.size * 0.05f) return null // <= 0: an empty array would divide 0 by 0 into black
     return (0xFF shl 24) or ((r / total).toInt() shl 16) or ((g / total).toInt() shl 8) or (b / total).toInt()
 }
 

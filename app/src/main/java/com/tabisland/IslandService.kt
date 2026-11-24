@@ -36,6 +36,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import android.view.accessibility.AccessibilityNodeProvider
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.SeekBar
 import android.widget.TextView
 import kotlin.math.abs
 import kotlin.math.max
@@ -44,7 +45,9 @@ import android.view.WindowManager.LayoutParams as WLP
 
 private const val TAG = "TabIsland"
 private const val SPOTIFY = "com.spotify.music"
-private const val BASE_FLAGS = WLP.FLAG_NOT_FOCUSABLE or WLP.FLAG_LAYOUT_IN_SCREEN or WLP.FLAG_LAYOUT_NO_LIMITS
+private val SEEK_ACTIONS = setOf(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,
+    android.R.id.accessibilityActionSetProgress)
+private const val BASE_FLAGS =WLP.FLAG_NOT_FOCUSABLE or WLP.FLAG_LAYOUT_IN_SCREEN or WLP.FLAG_LAYOUT_NO_LIMITS
 
 /** The front camera hole in screen pixels. Shared with the settings preview so both line up the same way. */
 fun cameraHole(m: WindowMetrics, density: Float): Rect {
@@ -85,6 +88,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private var battery = -1
     private var lowArmed = true
     private var dpi = 0
+    private var fontScale = 0f
 
     private var cameraX = 0
 
@@ -107,7 +111,8 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     override fun onServiceConnected() {
         wm = getSystemService(WindowManager::class.java)
         dpi = resources.configuration.densityDpi
-        prefs =getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
+        fontScale = resources.configuration.fontScale
+        prefs = getSharedPreferences(Prefs.FILE, MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(this)
         island = IslandView(this, this)
         touchView = object : View(this) {
@@ -159,6 +164,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         Island.onChange = null
         Island.clearFlashes("notif") // a later restart mustn't show these as new
         Island.showing = false; Island.syncHeadsUp(this) // island gone: give the system banners back
+        Island.hold = false // the settings preview reads it: a last render in landscape mustn't park its message demos
         Island.removeOngoing("torch") // torch callbacks stop with us; MediaListener keeps this key, a restart re-adds it if still on
         handler.removeCallbacksAndMessages(null)
         if (added) {
@@ -197,8 +203,10 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (!added) return
-        if (newConfig.densityDpi != dpi) { // IslandView bakes pixel sizes in at construction: rebuild it
+        // IslandView bakes pixel and text sizes in at construction: rebuild it
+        if (newConfig.densityDpi != dpi || newConfig.fontScale != fontScale) {
             dpi = newConfig.densityDpi
+            fontScale = newConfig.fontScale
             island.show(null, false, false, true) // stops the old view's spring clock so it can't resize our windows
             wm.removeView(island)
             island = IslandView(this, this)
@@ -264,16 +272,28 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
         Island.showing = !hidden && !locked && prefs.getBoolean("notif", true) && prefs.getBoolean("call", true)
         Island.syncHeadsUp(this)
         val big = if (live is Call) live.ringing && live.key != minimised else expanded
+        // TalkBack's virtual ids are positions in the card: on a new card, a kept focus would double-tap a different button
+        val card = Triple(live?.javaClass, (live as? Flash)?.let { it.key + it.id } ?: (live as? Call)?.key, big)
+        if (card != a11yCard) {
+            a11yCard = card
+            if (a11yFocus >= 0) a11yEvent(a11yFocus, AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED) // old views still up
+            a11yFocus = -1; hovered = -1
+        }
         Log.d(TAG, "render ${live?.javaClass?.simpleName ?: "idle"} expanded=$big hidden=$hidden")
         island.show(live, big, prefs.getBoolean("idle", true) || Island.calibrating, hidden)
         touchView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) // the mirrored controls below changed
+        // the outgoing card is still shown through its 120 ms fade, so that list had it too: again once it's gone
+        handler.removeCallbacks(a11yRefresh); handler.postDelayed(a11yRefresh, 150)
     }
+
+    private val a11yRefresh = Runnable { if (added) touchView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) }
 
     // ---- TalkBack: the drawing window is never touchable, so accessibility doesn't list it; the touch window (touchable
     // while something shows, sized to the pill) mirrors the pill and its controls as virtual views instead ----
 
     private var a11yFocus = -1
     private var hovered = -1
+    private var a11yCard: Any? = null // which card the focus belongs to
 
     /** What TalkBack stops on: the pill (the island's one child) and every clickable or labelled view in it, in order. */
     private fun a11yViews(): List<View> {
@@ -322,10 +342,15 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                 isVisibleToUser = true
                 setBoundsInScreen(screenRect(v))
                 if (v.isClickable) { isClickable = true; addAction(AccessibilityAction.ACTION_CLICK) }
-                if (v === island.getChildAt(0)) { // the pill: its long-press and swipe-up gestures
-                    isLongClickable = true
-                    addAction(AccessibilityAction.ACTION_LONG_CLICK)
-                    addAction(AccessibilityAction.ACTION_DISMISS)
+                if (v is SeekBar) { // the song position: its range and steps, as the real SeekBar offers them
+                    val own = v.createAccessibilityNodeInfo()
+                    rangeInfo = own.rangeInfo
+                    own.actionList.filter { it.id in SEEK_ACTIONS }.forEach(::addAction)
+                }
+                if (v === island.getChildAt(0)) { // the pill: its long-press and swipe-up gestures, when they do something
+                    val l = shown
+                    if (l?.pkg != null) { isLongClickable = true; addAction(AccessibilityAction.ACTION_LONG_CLICK) }
+                    if (expanded || l is Flash || l is Call && l.ringing && l.key != minimised) addAction(AccessibilityAction.ACTION_DISMISS)
                 }
                 isAccessibilityFocused = id == a11yFocus
                 addAction(if (id == a11yFocus) AccessibilityAction.ACTION_CLEAR_ACCESSIBILITY_FOCUS else AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS)
@@ -348,6 +373,7 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
                 AccessibilityNodeInfo.ACTION_CLICK -> return v.performClick() // the pill's click is tap()
                 AccessibilityNodeInfo.ACTION_LONG_CLICK -> if (v === island.getChildAt(0)) longPress() else return false
                 AccessibilityNodeInfo.ACTION_DISMISS -> if (v === island.getChildAt(0)) swipeUp() else return false
+                in SEEK_ACTIONS -> return v is SeekBar && v.performAccessibilityAction(action, args) // its listener seeks
                 else -> return false
             }
             return true
@@ -541,13 +567,18 @@ class IslandService : AccessibilityService(), IslandView.Host, SharedPreferences
     private val events = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_POWER_CONNECTED -> flash("charge", R.drawable.ic_bolt, "Charging", "$battery%", GREEN, battery)
+                // read now: the sticky BATTERY_CHANGED that sets [battery] may not have arrived yet ("Charging -1%")
+                Intent.ACTION_POWER_CONNECTED -> getSystemService(BatteryManager::class.java)
+                    .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY).takeIf { it in 0..100 }
+                    ?.let { flash("charge", R.drawable.ic_bolt, "Charging", "$it%", GREEN, it) }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
                     val plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
                     // re-armed only well clear of 20 %, so a level flapping between 20 and 21 alerts once
                     if (plugged || level >= 25) lowArmed = true
-                    else if (lowArmed && battery > 20 && level in 0..20) {
+                    // any drop to or within 20 % (unplugged at 20 and falling to 19 too); battery is -1 until the first
+                    // reading, so starting up already low doesn't alert
+                    else if (lowArmed && level in 0..20 && level < battery) {
                         lowArmed = false
                         flash("battery", R.drawable.ic_battery_alert, "Low Battery", "$level%", RED, level)
                     }
